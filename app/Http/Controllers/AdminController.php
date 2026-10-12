@@ -36,6 +36,17 @@ class AdminController extends Controller
             $articlesByModule[$module] = (int) ($rawKbModuleCounts[$module] ?? 0);
         }
 
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('shofol_modules')) {
+                $additionalModules = \App\Models\ShofolModule::whereNotIn('code', KnowledgeArticle::MODULES)->ordered()->get();
+                foreach ($additionalModules as $mod) {
+                    $articlesByModule[$mod->code] = (int) ($rawKbModuleCounts[$mod->code] ?? 0);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Graceful fallback
+        }
+
         // 3. AI Conversations & Chat Messages metrics
         $totalConversations = Conversation::count();
         $totalMessages = ChatMessage::count();

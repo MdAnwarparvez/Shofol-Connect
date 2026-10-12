@@ -54,6 +54,105 @@ class KnowledgeArticle extends Model
     }
 
     /**
+     * Get the dynamic Shofol module associated with this article by module code.
+     */
+    public function shofolModule(): BelongsTo
+    {
+        return $this->belongsTo(ShofolModule::class, 'module', 'code');
+    }
+
+    /**
+     * Get the category record associated with this article by category name.
+     */
+    public function knowledgeCategory(): BelongsTo
+    {
+        return $this->belongsTo(KnowledgeCategory::class, 'category', 'name');
+    }
+
+    /**
+     * Get available module choices for knowledge article forms.
+     * Returns active database modules, falling back to legacy constants if unseeded,
+     * and guarantees inclusion of the current article's existing module for safe edits.
+     *
+     * @param string|null $currentModule
+     * @return list<string>
+     */
+    public static function getAvailableModules(?string $currentModule = null): array
+    {
+        $activeCodes = [];
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('shofol_modules')) {
+                $activeCodes = ShofolModule::active()->ordered()->pluck('code')->toArray();
+            }
+        } catch (\Throwable $e) {
+            $activeCodes = self::MODULES;
+        }
+
+        if (empty($activeCodes)) {
+            $activeCodes = self::MODULES;
+        }
+
+        if (!empty($currentModule) && !in_array($currentModule, $activeCodes, true)) {
+            $activeCodes[] = $currentModule;
+        }
+
+        return array_values(array_unique($activeCodes));
+    }
+
+    /**
+     * Get available category choices for knowledge article forms filtered by module.
+     * Always ensures the article's existing category is included to prevent data loss.
+     *
+     * @param string|null $module
+     * @param string|null $currentCategory
+     * @return list<string>
+     */
+    public static function getAvailableCategories(?string $module = null, ?string $currentCategory = null): array
+    {
+        $categories = [];
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('knowledge_categories')) {
+                $query = KnowledgeCategory::query()->active()->ordered();
+                if (!empty($module)) {
+                    $query->forModule($module);
+                }
+                $categories = $query->pluck('name')->toArray();
+            }
+        } catch (\Throwable $e) {
+            // Graceful fallback
+        }
+
+        if (!empty($currentCategory) && !in_array($currentCategory, $categories, true)) {
+            $categories[] = $currentCategory;
+        }
+
+        return array_values(array_unique($categories));
+    }
+
+    /**
+     * Get all active categories grouped by module code for dynamic frontend filtering.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function getCategoriesGroupedByModule(): array
+    {
+        $grouped = [];
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('knowledge_categories')) {
+                $categories = KnowledgeCategory::with('shofolModule')->active()->ordered()->get();
+                foreach ($categories as $cat) {
+                    $code = $cat->shofolModule?->code ?? 'General';
+                    $grouped[$code][] = $cat->name;
+                }
+            }
+        } catch (\Throwable $e) {
+            // Graceful fallback
+        }
+
+        return $grouped;
+    }
+
+    /**
      * Accessor alias: allow accessing content as answer.
      */
     public function getAnswerAttribute(): ?string
@@ -82,7 +181,7 @@ class KnowledgeArticle extends Model
      */
     public function scopeForModule(Builder $query, ?string $module): Builder
     {
-        if (!empty($module) && in_array($module, self::MODULES, true)) {
+        if (!empty($module)) {
             return $query->where('module', $module);
         }
 

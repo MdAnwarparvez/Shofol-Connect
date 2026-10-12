@@ -25,7 +25,7 @@ class KnowledgeArticleController extends Controller
 
         $articles = $query->paginate(10)->withQueryString();
 
-        $modules = KnowledgeArticle::MODULES;
+        $modules = \App\Models\ShofolModule::ordered()->pluck('code')->toArray() ?: KnowledgeArticle::MODULES;
         $statuses = KnowledgeArticle::STATUSES;
 
         // Module article count summary for quick statistics
@@ -47,10 +47,12 @@ class KnowledgeArticleController extends Controller
      */
     public function create(): View
     {
-        $modules = KnowledgeArticle::MODULES;
+        $modules = KnowledgeArticle::getAvailableModules();
         $statuses = KnowledgeArticle::STATUSES;
+        $categoriesByModule = KnowledgeArticle::getCategoriesGroupedByModule();
+        $categories = KnowledgeArticle::getAvailableCategories();
 
-        return view('admin.knowledge-articles.create', compact('modules', 'statuses'));
+        return view('admin.knowledge-articles.create', compact('modules', 'statuses', 'categoriesByModule', 'categories'));
     }
 
     /**
@@ -83,13 +85,17 @@ class KnowledgeArticleController extends Controller
      */
     public function edit(KnowledgeArticle $knowledgeArticle): View
     {
-        $modules = KnowledgeArticle::MODULES;
+        $modules = KnowledgeArticle::getAvailableModules($knowledgeArticle->module);
         $statuses = KnowledgeArticle::STATUSES;
+        $categoriesByModule = KnowledgeArticle::getCategoriesGroupedByModule();
+        $categories = KnowledgeArticle::getAvailableCategories($knowledgeArticle->module, $knowledgeArticle->category);
 
         return view('admin.knowledge-articles.edit', compact(
             'knowledgeArticle',
             'modules',
-            'statuses'
+            'statuses',
+            'categoriesByModule',
+            'categories'
         ));
     }
 

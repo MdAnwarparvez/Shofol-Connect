@@ -2,7 +2,10 @@
 
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\Admin\AdminTicketController;
+use App\Http\Controllers\Admin\FaqController;
 use App\Http\Controllers\Admin\KnowledgeArticleController;
+use App\Http\Controllers\Admin\KnowledgeCategoryController;
+use App\Http\Controllers\Admin\ShofolModuleController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DashboardController;
@@ -43,6 +46,18 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminController::class, 'index'])->name('dashboard');
     Route::resource('knowledge-articles', KnowledgeArticleController::class);
+
+    // Shofol Dynamic Module Management routes
+    Route::patch('/modules/{module}/toggle', [ShofolModuleController::class, 'toggle'])->name('modules.toggle');
+    Route::resource('modules', ShofolModuleController::class);
+
+    // Dynamic Knowledge Category Management routes
+    Route::patch('/categories/{category}/toggle', [KnowledgeCategoryController::class, 'toggle'])->name('categories.toggle');
+    Route::resource('categories', KnowledgeCategoryController::class);
+
+    // Dynamic FAQ Management routes
+    Route::patch('/faqs/{faq}/toggle', [FaqController::class, 'toggle'])->name('faqs.toggle');
+    Route::resource('faqs', FaqController::class);
 
     // Support Ticket routes (Admin Portal)
     Route::get('/tickets', [AdminTicketController::class, 'index'])->name('tickets.index');

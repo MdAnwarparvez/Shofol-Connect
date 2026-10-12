@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -83,6 +84,10 @@ class AIService
      */
     public function ask(string $userQuestion): array
     {
+        if (function_exists('set_time_limit') && (!function_exists('app') || !app()->runningUnitTests())) {
+            @set_time_limit(180);
+        }
+
         $cleanQuestion = trim($userQuestion);
 
         if (empty($cleanQuestion)) {
@@ -206,22 +211,30 @@ class AIService
                 'model' => $this->model,
             ]);
 
+            $hasRelevant = $retrieval['has_relevant_results'];
+            $fallbackAnswer = $this->buildPolicyFallbackAnswer($errorType, $retrieval['articles']);
+
             return [
                 'success' => false,
-                'answer' => 'The AI assistant encountered a temporary service issue. Please try again or open a support ticket.',
+                'answer' => $fallbackAnswer,
                 'sources' => $retrieval['sources'],
-                'fallback' => false,
+                'fallback' => true,
+                'is_policy_fallback' => $hasRelevant,
                 'error' => $errorType,
                 'error_message' => $errorMessage,
             ];
         } catch (ConnectionException $e) {
             $errorMsg = 'Connection timed out after ' . $this->timeout . 's';
             Log::warning('AI Service Timeout/Connection error', ['error' => $errorMsg]);
+            $hasRelevant = $retrieval['has_relevant_results'];
+            $fallbackAnswer = $this->buildPolicyFallbackAnswer('TIMEOUT', $retrieval['articles']);
+
             return [
                 'success' => false,
-                'answer' => 'The AI assistant request timed out. Please try again in a moment or open a support ticket.',
+                'answer' => $fallbackAnswer,
                 'sources' => $retrieval['sources'],
-                'fallback' => false,
+                'fallback' => true,
+                'is_policy_fallback' => $hasRelevant,
                 'error' => 'TIMEOUT',
                 'error_message' => $errorMsg,
             ];
@@ -229,15 +242,53 @@ class AIService
             $rawError = $e->getMessage();
             $safeError = !empty($this->apiKey) ? str_replace($this->apiKey, '[REDACTED]', $rawError) : $rawError;
             Log::error('Unexpected AI Service Exception', ['error' => $safeError]);
+            $hasRelevant = $retrieval['has_relevant_results'];
+            $fallbackAnswer = $this->buildPolicyFallbackAnswer('API_ERROR', $retrieval['articles']);
+
             return [
                 'success' => false,
-                'answer' => 'An unexpected error occurred while processing your request. Please try again later.',
+                'answer' => $fallbackAnswer,
                 'sources' => $retrieval['sources'],
-                'fallback' => false,
+                'fallback' => true,
+                'is_policy_fallback' => $hasRelevant,
                 'error' => 'EXCEPTION',
                 'error_message' => $safeError,
             ];
         }
+    }
+
+    /**
+     * Build a friendly fallback answer using retrieved knowledge base articles when the LLM is unavailable.
+     *
+     * @param string $errorType
+     * @param \Illuminate\Support\Collection<\App\Models\KnowledgeArticle> $articles
+     * @return string
+     */
+    protected function buildPolicyFallbackAnswer(string $errorType, Collection $articles): string
+    {
+        $friendlyReason = match ($errorType) {
+            'RATE_LIMIT_OR_QUOTA' => 'The AI assistant encountered a temporary service issue with the upstream provider (request quota limit reached).',
+            'SERVICE_UNAVAILABLE' => 'The AI assistant encountered a temporary service issue with the upstream provider (temporary high demand).',
+            'TIMEOUT' => 'The AI assistant request timed out. The AI assistant encountered a temporary service issue with the upstream provider.',
+            default => 'The AI assistant encountered a temporary service issue.',
+        };
+
+        if ($articles->isEmpty()) {
+            return "{$friendlyReason} Please try again in a moment or open a support ticket.";
+        }
+
+        $primary = $articles->first();
+
+        $output = "{$friendlyReason}\n\n";
+        $output .= "However, here is the official policy information retrieved directly from the verified Shofol Connect Knowledge Base:\n\n";
+        $output .= "📋 Verified Policy: {$primary->title} [Module: {$primary->module}]\n";
+        if (!empty($primary->category)) {
+            $output .= "Category: {$primary->category}\n";
+        }
+        $output .= "Policy Details:\n{$primary->content}\n\n";
+        $output .= "(Note: This verified policy excerpt is provided directly from official company documentation while AI generation is temporarily unavailable. If you need further assistance, please open a support ticket.)";
+
+        return trim($output);
     }
 
     /**
@@ -251,9 +302,10 @@ You are the official AI Support Assistant for Shofol Connect (covering HRM, Payr
 CRITICAL CONSTRAINTS:
 1. Answer the user's question STRICTLY and ONLY using the provided Shofol Connect Knowledge Base Context below.
 2. Do NOT extrapolate, assume, or invent features, policies, numbers, or procedures that are not explicitly stated in the context.
-3. If the provided context does not contain sufficient details to answer the question, state:
+3. For payroll and tax questions: never invent specific income tax rates, percentages, or tax amounts; explain that TDS is itemized on the digital payslip and depends on applicable statutory tax rules.
+4. If the provided context does not contain sufficient details to answer the question, state:
    "I couldn't find enough information about that in the Shofol Connect knowledge base. Please contact our support team or open a support ticket for further assistance."
-4. Be professional, accurate, and concise.
+5. Be professional, accurate, and concise.
 
 SHOFOL CONNECT KNOWLEDGE BASE CONTEXT:
 ---

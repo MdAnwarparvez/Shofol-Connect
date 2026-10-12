@@ -201,6 +201,13 @@
                     </div>
                     <div>
                         <div class="message-bubble {{ $msg->role }}">
+                            @if($msg->role === 'assistant' && str_contains($msg->content, 'Verified Policy:'))
+                                <div class="mb-2">
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                        <i class="bi bi-file-earmark-check me-1"></i>Official Knowledge Base Policy
+                                    </span>
+                                </div>
+                            @endif
                             {!! nl2br(e($msg->content)) !!}
                         </div>
                         @if($msg->role === 'assistant' && !empty($msg->sources))
@@ -325,9 +332,20 @@
     }
 
     // Append an assistant message element
-    function appendAssistantMessage(text, sources, time, isFallback, convId) {
+    function appendAssistantMessage(text, sources, time, isFallback, convId, isPolicyFallback) {
         const row = document.createElement('div');
         row.className = 'message-row assistant';
+
+        let badgeHtml = '';
+        if (isPolicyFallback || text.includes('Verified Policy:')) {
+            badgeHtml = `
+                <div class="mb-2">
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                        <i class="bi bi-file-earmark-check me-1"></i>Official Knowledge Base Policy
+                    </span>
+                </div>
+            `;
+        }
 
         let sourcesHtml = '';
         if (sources && sources.length > 0) {
@@ -358,7 +376,8 @@
             </div>
             <div>
                 <div class="message-bubble assistant">
-                    ${escapeHtml(text).replace(/\\n/g, '<br>')}
+                    ${badgeHtml}
+                    <div>${escapeHtml(text).replace(/\\n/g, '<br>')}</div>
                     ${fallbackButtonHtml}
                 </div>
                 ${sourcesHtml}
@@ -450,14 +469,15 @@
                     data.assistant_message.sources,
                     data.assistant_message.created_at,
                     data.assistant_message.fallback,
-                    data.conversation_id || conversationIdInput.value
+                    data.conversation_id || conversationIdInput.value,
+                    data.assistant_message.is_policy_fallback
                 );
             } else {
                 throw new Error('Unexpected response format from server.');
             }
         } catch (err) {
             console.error(err);
-            showError(err.message || 'Failed to communicate with AI Assistant. Please try again.');
+            showError('The AI assistant is temporarily unavailable. Please try again in a moment or open a support ticket.');
         } finally {
             setLoading(false);
             scrollToBottom();

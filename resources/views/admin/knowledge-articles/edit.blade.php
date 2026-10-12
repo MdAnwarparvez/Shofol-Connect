@@ -71,10 +71,35 @@
                             <label for="category" class="form-label fw-semibold">
                                 Category <span class="text-danger">*</span>
                             </label>
-                            <input type="text" class="form-control @error('category') is-invalid @enderror" id="category" name="category" value="{{ old('category', $knowledgeArticle->category) }}" required>
+                            <select class="form-select @error('category') is-invalid @enderror" id="category" name="category" required>
+                                <option value="">-- Select Category --</option>
+                                @php
+                                    $selectedCat = old('category', $knowledgeArticle->category);
+                                    $foundInGroups = false;
+                                @endphp
+                                @foreach($categoriesByModule as $modCode => $catList)
+                                    <optgroup label="{{ $modCode }}" data-module="{{ $modCode }}">
+                                        @foreach($catList as $catName)
+                                            @if($selectedCat === $catName)
+                                                @php $foundInGroups = true; @endphp
+                                            @endif
+                                            <option value="{{ $catName }}" data-module="{{ $modCode }}" {{ $selectedCat === $catName ? 'selected' : '' }}>
+                                                {{ $catName }}
+                                            </option>
+                                        @endforeach
+                                    </optgroup>
+                                @endforeach
+
+                                @if(!empty($selectedCat) && !$foundInGroups)
+                                    <option value="{{ $selectedCat }}" data-module="{{ $knowledgeArticle->module }}" selected>
+                                        {{ $selectedCat }} (Current / Legacy)
+                                    </option>
+                                @endif
+                            </select>
                             @error('category')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
+                            <div class="form-text small">Categories are automatically filtered based on the selected module.</div>
                         </div>
 
                         <!-- Title -->
@@ -165,4 +190,40 @@
         </div>
     </div>
 </div>
+@endsection
+
+@section('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const moduleSelect = document.getElementById('module');
+    const categorySelect = document.getElementById('category');
+    if (!moduleSelect || !categorySelect) return;
+
+    function filterCategories() {
+        const selectedModule = moduleSelect.value;
+        const optgroups = categorySelect.querySelectorAll('optgroup');
+
+        optgroups.forEach(group => {
+            const groupModule = group.getAttribute('data-module');
+            if (!selectedModule || groupModule === selectedModule) {
+                group.style.display = '';
+            } else {
+                group.style.display = 'none';
+            }
+        });
+
+        // If currently selected category belongs to a hidden optgroup, reset selection
+        const selectedOption = categorySelect.selectedOptions[0];
+        if (selectedOption && selectedOption.value) {
+            const parentGroup = selectedOption.parentElement;
+            if (parentGroup && parentGroup.tagName === 'OPTGROUP' && parentGroup.style.display === 'none') {
+                categorySelect.value = '';
+            }
+        }
+    }
+
+    moduleSelect.addEventListener('change', filterCategories);
+    filterCategories();
+});
+</script>
 @endsection

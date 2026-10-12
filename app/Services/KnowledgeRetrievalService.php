@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Faq;
 use App\Models\KnowledgeArticle;
 use Illuminate\Support\Collection;
 
@@ -18,12 +19,12 @@ class KnowledgeRetrievalService
     ];
 
     /**
-     * Minimum relevance score required to consider an article relevant.
+     * Minimum relevance score required to consider an item relevant.
      */
     protected int $minimumScoreThreshold = 3;
 
     /**
-     * Retrieve and rank knowledge articles relevant to the user query.
+     * Retrieve and rank knowledge articles and verified FAQs relevant to the user query.
      *
      * @param string $query
      * @param int $limit
@@ -45,27 +46,74 @@ class KnowledgeRetrievalService
         // Tokenize query into meaningful search words (length >= 3, non-stopwords)
         $tokens = $this->extractTokens($normalizedQuery);
 
-        // Fetch active articles for candidate scoring
-        $candidates = KnowledgeArticle::active()->get();
+        $scoredCandidates = collect();
 
-        $scoredArticles = $candidates->map(function (KnowledgeArticle $article) use ($normalizedQuery, $tokens) {
-            $score = $this->calculateRelevanceScore($article, $normalizedQuery, $tokens);
-            return [
-                'article' => $article,
-                'score' => $score,
-            ];
-        })
-        ->filter(fn ($item) => $item['score'] >= $this->minimumScoreThreshold)
-        ->sortByDesc('score')
-        ->take($limit)
-        ->pluck('article');
+        // 1. Fetch & score active knowledge articles
+        $articles = KnowledgeArticle::active()->get();
+        foreach ($articles as $article) {
+            $score = $this->calculateArticleScore($article, $normalizedQuery, $tokens);
+            if ($score >= $this->minimumScoreThreshold) {
+                $scoredCandidates->push([
+                    'type' => 'article',
+                    'model' => $article,
+                    'module' => $article->module,
+                    'category' => $article->category,
+                    'score' => $score,
+                ]);
+            }
+        }
 
-        $hasRelevant = $scoredArticles->isNotEmpty();
-        $context = $hasRelevant ? $this->buildContextString($scoredArticles) : '';
-        $sources = $hasRelevant ? $this->formatSources($scoredArticles) : [];
+        // 2. Fetch & score active FAQs
+        $faqs = Faq::active()->with(['shofolModule', 'knowledgeCategory'])->get();
+        foreach ($faqs as $faq) {
+            $score = $this->calculateFaqScore($faq, $normalizedQuery, $tokens);
+            if ($score >= $this->minimumScoreThreshold) {
+                $scoredCandidates->push([
+                    'type' => 'faq',
+                    'model' => $faq,
+                    'module' => $faq->shofolModule?->code ?? $faq->shofolModule?->name ?? 'General',
+                    'category' => $faq->knowledgeCategory?->name ?? 'General',
+                    'score' => $score,
+                ]);
+            }
+        }
+
+        // 3. Sort candidates by relevance score descending
+        $sorted = $scoredCandidates->sortByDesc('score');
+
+        // 4. Deduplicate to avoid repetitive responses when the same policy exists in both Articles and FAQs
+        $deduplicated = collect();
+        $seenSignatures = [];
+
+        foreach ($sorted as $candidate) {
+            $mod = mb_strtolower(trim($candidate['module']));
+            $cat = mb_strtolower(trim($candidate['category']));
+            $sig = "{$mod}|{$cat}";
+
+            // If an authoritative article already covers this exact module & category with higher/equal score,
+            // or if an FAQ on the same topic is already included, skip redundant duplicate
+            if (isset($seenSignatures[$sig])) {
+                // If the query specifically matches a different question or title, allow distinct entries
+                $existing = $seenSignatures[$sig];
+                if ($this->isRedundantDuplicate($candidate['model'], $existing['model'])) {
+                    continue;
+                }
+            }
+
+            $seenSignatures[$sig] = $candidate;
+            $deduplicated->push($candidate['model']);
+
+            if ($deduplicated->count() >= $limit) {
+                break;
+            }
+        }
+
+        $hasRelevant = $deduplicated->isNotEmpty();
+        $context = $hasRelevant ? $this->buildContextString($deduplicated) : '';
+        $sources = $hasRelevant ? $this->formatSources($deduplicated) : [];
 
         return [
-            'articles' => $scoredArticles,
+            'articles' => $deduplicated,
             'has_relevant_results' => $hasRelevant,
             'context' => $context,
             'sources' => $sources,
@@ -73,9 +121,31 @@ class KnowledgeRetrievalService
     }
 
     /**
-     * Calculate lexical relevance score for an article against query and tokens.
+     * Check if two candidates represent redundant duplicate policy text.
      */
-    protected function calculateRelevanceScore(KnowledgeArticle $article, string $query, array $tokens): int
+    protected function isRedundantDuplicate(mixed $itemA, mixed $itemB): bool
+    {
+        $textA = mb_strtolower(trim(($itemA instanceof KnowledgeArticle ? $itemA->title . ' ' . $itemA->question : $itemA->question)));
+        $textB = mb_strtolower(trim(($itemB instanceof KnowledgeArticle ? $itemB->title . ' ' . $itemB->question : $itemB->question)));
+
+        $tokensA = $this->extractTokens($textA);
+        $tokensB = $this->extractTokens($textB);
+
+        if (empty($tokensA) || empty($tokensB)) {
+            return false;
+        }
+
+        $intersection = array_intersect($tokensA, $tokensB);
+        $minCount = min(count($tokensA), count($tokensB));
+
+        // High token overlap (>= 60%) in the same category indicates redundant policy duplicate
+        return ($minCount > 0) && (count($intersection) / $minCount >= 0.6);
+    }
+
+    /**
+     * Calculate lexical relevance score for a KnowledgeArticle.
+     */
+    protected function calculateArticleScore(KnowledgeArticle $article, string $query, array $tokens): int
     {
         $score = 0;
 
@@ -86,7 +156,7 @@ class KnowledgeRetrievalService
         $content = mb_strtolower($article->content);
         $module = mb_strtolower($article->module);
 
-        // 1. Direct phrase or sub-phrase matching (highest relevance)
+        // 1. Direct phrase matching
         if (!empty($query)) {
             if (str_contains($title, $query)) {
                 $score += 20;
@@ -128,11 +198,66 @@ class KnowledgeRetrievalService
     }
 
     /**
+     * Calculate lexical relevance score for an Faq model.
+     */
+    protected function calculateFaqScore(Faq $faq, string $query, array $tokens): int
+    {
+        $score = 0;
+
+        $question = mb_strtolower($faq->question);
+        $answer = mb_strtolower($faq->answer);
+        $keywords = mb_strtolower($faq->keywords ?? '');
+        $module = mb_strtolower($faq->shofolModule?->name ?? $faq->shofolModule?->code ?? '');
+        $category = mb_strtolower($faq->knowledgeCategory?->name ?? '');
+
+        // 1. Direct phrase matching
+        if (!empty($query)) {
+            if (str_contains($question, $query)) {
+                $score += 25; // Exact question match gives strong boost
+            }
+            if (!empty($keywords) && str_contains($keywords, $query)) {
+                $score += 15;
+            }
+            if (str_contains($answer, $query)) {
+                $score += 8;
+            }
+        }
+
+        // 2. Token / keyword matches
+        foreach ($tokens as $token) {
+            if (!empty($module) && str_contains($module, $token)) {
+                $score += 5;
+            }
+            if (!empty($category) && str_contains($category, $token)) {
+                $score += 4;
+            }
+            if (str_contains($question, $token)) {
+                $score += 7;
+            }
+            if (!empty($keywords) && str_contains($keywords, $token)) {
+                $score += 5;
+            }
+            if (str_contains($answer, $token)) {
+                $score += 1;
+            }
+        }
+
+        return $score;
+    }
+
+    /**
+     * Backward-compatible alias for calculateArticleScore.
+     */
+    protected function calculateRelevanceScore(KnowledgeArticle $article, string $query, array $tokens): int
+    {
+        return $this->calculateArticleScore($article, $query, $tokens);
+    }
+
+    /**
      * Extract normalized tokens from input query.
      */
     protected function extractTokens(string $query): array
     {
-        // Split on non-alphanumeric characters
         $words = preg_split('/[^\p{L}\p{N}]+/u', $query, -1, PREG_SPLIT_NO_EMPTY);
 
         $tokens = [];
@@ -147,21 +272,31 @@ class KnowledgeRetrievalService
     }
 
     /**
-     * Construct structured prompt context string from retrieved articles.
+     * Construct structured prompt context string from retrieved items.
      */
-    protected function buildContextString(Collection $articles): string
+    protected function buildContextString(Collection $items): string
     {
         $sections = [];
 
-        foreach ($articles as $index => $article) {
+        foreach ($items as $index => $item) {
             $num = $index + 1;
-            $entry = "[Source {$num}] Module: {$article->module} | Category: {$article->category} | Title: {$article->title}\n";
-            if (!empty($article->question)) {
-                $entry .= "Primary Question: {$article->question}\n";
-            }
-            $entry .= "Content / Policy: {$article->content}\n";
-            if (!empty($article->keywords)) {
-                $entry .= "Keywords: {$article->keywords}\n";
+            if ($item instanceof KnowledgeArticle) {
+                $entry = "[Source {$num}] Module: {$item->module} | Category: {$item->category} | Title: {$item->title}\n";
+                if (!empty($item->question)) {
+                    $entry .= "Primary Question: {$item->question}\n";
+                }
+                $entry .= "Content / Policy: {$item->content}\n";
+                if (!empty($item->keywords)) {
+                    $entry .= "Keywords: {$item->keywords}\n";
+                }
+            } elseif ($item instanceof Faq) {
+                $modName = $item->shofolModule?->name ?? $item->shofolModule?->code ?? 'General';
+                $catName = $item->knowledgeCategory?->name ?? 'General';
+                $entry = "[Source {$num}] (FAQ) Module: {$modName} | Category: {$catName} | Question: {$item->question}\n";
+                $entry .= "Answer / Verified Policy: {$item->answer}\n";
+                if (!empty($item->keywords)) {
+                    $entry .= "Keywords: {$item->keywords}\n";
+                }
             }
             $sections[] = trim($entry);
         }
@@ -170,16 +305,27 @@ class KnowledgeRetrievalService
     }
 
     /**
-     * Format source article metadata for citations.
+     * Format source item metadata for citations.
      */
-    protected function formatSources(Collection $articles): array
+    protected function formatSources(Collection $items): array
     {
-        return $articles->map(function (KnowledgeArticle $article) {
+        return $items->map(function ($item) {
+            if ($item instanceof KnowledgeArticle) {
+                return [
+                    'id' => $item->id,
+                    'title' => $item->title,
+                    'module' => $item->module,
+                    'category' => $item->category,
+                    'type' => 'article',
+                ];
+            }
+
             return [
-                'id' => $article->id,
-                'title' => $article->title,
-                'module' => $article->module,
-                'category' => $article->category,
+                'id' => $item->id,
+                'title' => $item->question,
+                'module' => $item->shofolModule?->name ?? $item->shofolModule?->code ?? 'General',
+                'category' => $item->knowledgeCategory?->name ?? 'General',
+                'type' => 'faq',
             ];
         })->values()->toArray();
     }

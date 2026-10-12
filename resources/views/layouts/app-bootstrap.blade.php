@@ -88,6 +88,21 @@
                                 </a>
                             </li>
                             <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('admin.modules.*') ? 'active fw-semibold' : '' }}" href="{{ route('admin.modules.index') }}">
+                                    <i class="bi bi-grid-3x3-gap me-1"></i> Modules
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('admin.categories.*') ? 'active fw-semibold' : '' }}" href="{{ route('admin.categories.index') }}">
+                                    <i class="bi bi-tags me-1"></i> Categories
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('admin.faqs.*') ? 'active fw-semibold' : '' }}" href="{{ route('admin.faqs.index') }}">
+                                    <i class="bi bi-question-circle me-1"></i> FAQs
+                                </a>
+                            </li>
+                            <li class="nav-item">
                                 <a class="nav-link {{ request()->routeIs('admin.tickets.*') ? 'active fw-semibold' : '' }}" href="{{ route('admin.tickets.index') }}">
                                     <i class="bi bi-ticket-perforated-fill me-1"></i> Manage Tickets
                                 </a>

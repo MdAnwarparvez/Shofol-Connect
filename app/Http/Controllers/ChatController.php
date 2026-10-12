@@ -134,6 +134,8 @@ class ChatController extends Controller
                     'content' => $assistantMessage->content,
                     'sources' => $assistantMessage->sources ?? [],
                     'fallback' => $aiResult['fallback'] ?? false,
+                    'is_policy_fallback' => $aiResult['is_policy_fallback'] ?? false,
+                    'error' => $aiResult['error'] ?? null,
                     'created_at' => $assistantMessage->created_at->format('h:i A'),
                 ],
                 'conversation_id' => $conversation->id,

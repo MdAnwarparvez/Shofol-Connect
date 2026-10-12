@@ -38,6 +38,15 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
+        // Seed Core Shofol Business Modules (Idempotent)
+        $this->call(ShofolModuleSeeder::class);
+
+        // Seed Default Knowledge Categories (Idempotent)
+        $this->call(KnowledgeCategorySeeder::class);
+
+        // Seed Default Verified Policy FAQs (Idempotent)
+        $this->call(FaqSeeder::class);
+
         // Seed Sample Knowledge Articles
         $adminUser = User::where('email', 'admin@shofolconnect.com')->first();
         $adminId = $adminUser ? $adminUser->id : null;
@@ -47,9 +56,9 @@ class DatabaseSeeder extends Seeder
             [
                 'module' => 'HRM',
                 'category' => 'Leave Policy',
-                'question' => 'How do full-time employees request annual or casual leave in Shofol Connect?',
-                'content' => "Employees are entitled to 14 days of annual leave and 10 days of casual leave per calendar year. Leave requests must be submitted through the HRM portal at least 3 business days in advance. Line managers must review and approve requests within 48 hours. Unused casual leave lapses at year-end, while up to 5 days of annual leave can be carried forward.",
-                'keywords' => 'leave, annual leave, casual leave, vacation, pto, hrm, time off',
+                'question' => 'How do full-time employees request annual or casual leave?',
+                'content' => "Full-time employees receive 14 annual leave days and 10 casual leave days per calendar year. Submit requests through the HRM portal at least 3 business days in advance. Line managers must review requests within 48 hours. Unused casual leave expires at year-end; up to 5 annual leave days may be carried forward.",
+                'keywords' => 'hrm, leave, annual leave, casual leave, full-time employees, request leave, time off, vacation, pto, line manager, carry forward',
                 'status' => 'active',
                 'created_by' => $adminId,
             ]
@@ -61,8 +70,8 @@ class DatabaseSeeder extends Seeder
                 'module' => 'Payroll',
                 'category' => 'Salary & Tax',
                 'question' => 'When is monthly salary disbursed and how is tax deduction computed?',
-                'content' => "Payroll cutoff is the 25th day of every calendar month. Salary disbursement is executed on the final working day of each month via direct bank transfer. Statutory deductions such as income tax withholding (TDS) and provident fund contributions (8% employer and employee match) are itemized on the digital pay slip accessible under the Payroll portal.",
-                'keywords' => 'payroll, salary, tax, deduction, payslip, disbursement, bank transfer, provident fund',
+                'content' => "Payroll cutoff is the 25th of each month. Salary disbursement is executed on the final working day of each month by direct bank transfer. Tax deduction (TDS) and provident fund contributions are itemized on the digital payslip accessible under the Payroll portal. Employee and employer provident fund contributions are each 8%. Tax deduction (TDS) is computed based on applicable statutory tax rules rather than a fixed company rate, and is itemized on the digital payslip.",
+                'keywords' => 'payroll, salary, disbursement, bank transfer, direct bank transfer, tax deduction, tds, taxes, provident fund, cutoff, digital payslip, pay slip',
                 'status' => 'active',
                 'created_by' => $adminId,
             ]
@@ -86,9 +95,9 @@ class DatabaseSeeder extends Seeder
             [
                 'module' => 'Accounting',
                 'category' => 'Invoicing & Receivables',
-                'question' => 'How do we issue customer invoices and what are the standard payment terms?',
-                'content' => "Invoices must be generated from the Accounting module with auto-generated serial numbering. Standard payment terms are Net 30 days unless a custom contract specifies otherwise. Late payments incur a 1.5% monthly service fee after a 7-day grace period. Invoices marked as Paid reconcile automatically with connected bank statements.",
-                'keywords' => 'accounting, invoice, billing, payment terms, net 30, receivables, reconciliation',
+                'question' => 'How do I generate a customer invoice and what are the payment terms?',
+                'content' => "Generate invoices through the Accounting module with sequential serial numbers. Standard payment terms are Net 30 days unless an approved contract specifies otherwise. A 7-day grace period applies; after it, a 1.5% monthly service fee applies to unpaid invoices. Marking an invoice Paid automatically reconciles it with connected bank statements.",
+                'keywords' => 'accounting, invoice, customer invoice, billing, payment terms, net 30, sequential serial numbers, grace period, service fee, reconciliation, bank statements',
                 'status' => 'active',
                 'created_by' => $adminId,
             ]
