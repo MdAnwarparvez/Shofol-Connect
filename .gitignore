@@ -1,0 +1,58 @@
+# Logs & Debugging
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS & Editor Files
+.DS_Store
+Thumbs.db
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+.phpactor.json
+Homestead.json
+Homestead.yaml
+
+# Environment & Secret Files (CRITICAL: Never commit credentials)
+.env
+.env.*
+!.env.example
+.env.backup
+.env.production
+/auth.json
+
+# Dependencies & Compiled Assets
+/node_modules
+/vendor
+/public/build
+/public/hot
+/public/storage
+
+# Storage, Caches & Keys
+/storage/*.key
+/storage/pail
+/storage/logs/*
+!/storage/logs/.gitignore
+/storage/framework/cache/data/*
+!/storage/framework/cache/data/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/app/private/*
+!/storage/app/private/.gitignore
+/storage/app/public/*
+!/storage/app/public/.gitignore
+
+# Testing Cache
+.phpunit.result.cache
+/.phpunit.cache
+
+# Databases (Local SQLite files)
+database/*.sqlite
+database/*.sqlite-journal
+database/*.sqlite-shm
+database/*.sqlite-wal
