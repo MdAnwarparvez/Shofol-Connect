@@ -31,6 +31,7 @@ class Faq extends Model
         'slug',
         'answer',
         'keywords',
+        'embedding',
         'is_active',
         'sort_order',
         'created_by',
@@ -49,6 +50,7 @@ class Faq extends Model
             'shofol_module_id' => 'integer',
             'knowledge_category_id' => 'integer',
             'created_by' => 'integer',
+            'embedding' => 'array',
         ];
     }
 
@@ -240,6 +242,14 @@ class Faq extends Model
 
                 $faq->slug = $slug;
             }
+        });
+
+        static::saved(function () {
+            \Illuminate\Support\Facades\Cache::forget('kb_active_faqs');
+        });
+
+        static::deleted(function () {
+            \Illuminate\Support\Facades\Cache::forget('kb_active_faqs');
         });
     }
 }

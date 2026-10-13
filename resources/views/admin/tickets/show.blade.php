@@ -36,6 +36,15 @@
                             <span class="badge {{ $ticket->statusBadgeClass }} px-2 py-1 fs-6">{{ $ticket->status }}</span>
                             <span class="badge {{ $ticket->priorityBadgeClass }} px-2 py-1">{{ $ticket->priority }} Priority</span>
                             <span class="badge bg-light text-dark border">{{ $ticket->category }}</span>
+                            @if($ticket->assignedTo)
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                    <i class="bi bi-person-check me-1"></i>Assigned: {{ $ticket->assignedTo->name }}
+                                </span>
+                            @else
+                                <span class="badge bg-light text-muted border px-2 py-1">
+                                    Unassigned
+                                </span>
+                            @endif
                         </div>
                         <span class="text-muted small">Submitted {{ $ticket->created_at->format('M d, Y h:i A') }}</span>
                     </div>
@@ -52,7 +61,7 @@
                                         <div class="fw-bold text-info-emphasis">
                                             <i class="bi bi-robot me-1"></i> Escalated from AI Assistant (Session #{{ $ticket->conversation->id }})
                                         </div>
-                                        <a href="{{ route('chat.show', $ticket->conversation) }}" class="btn btn-outline-info btn-sm">
+                                        <a href="{{ route('admin.conversations.show', $ticket->conversation) }}" class="btn btn-outline-info btn-sm">
                                             <i class="bi bi-box-arrow-up-right me-1"></i>Inspect Chat Session
                                         </a>
                                     </div>
@@ -79,7 +88,7 @@
                             @method('PUT')
 
                             <div class="row g-3 mb-3">
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <label for="status" class="form-label fw-semibold">
                                         Update Status <span class="text-danger">*</span>
                                     </label>
@@ -95,7 +104,7 @@
                                     @enderror
                                 </div>
 
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <label for="priority" class="form-label fw-semibold">
                                         Update Priority <span class="text-danger">*</span>
                                     </label>
@@ -107,6 +116,23 @@
                                         @endforeach
                                     </select>
                                     @error('priority')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label for="assigned_to" class="form-label fw-semibold">
+                                        Assign Staff Member
+                                    </label>
+                                    <select class="form-select @error('assigned_to') is-invalid @enderror" id="assigned_to" name="assigned_to">
+                                        <option value="">-- Unassigned --</option>
+                                        @foreach($admins as $adm)
+                                            <option value="{{ $adm->id }}" {{ old('assigned_to', $ticket->assigned_to) == $adm->id ? 'selected' : '' }}>
+                                                {{ $adm->name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @error('assigned_to')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>

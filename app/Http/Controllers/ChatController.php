@@ -106,8 +106,16 @@ class ChatController extends Controller
             'content' => $validated['message'],
         ]);
 
-        // 3. Query AIService with RAG retrieval
-        $aiResult = $aiService->ask($validated['message']);
+        // 3. Query AIService with RAG retrieval and multi-turn conversation context
+        $priorHistory = $conversation->messages()
+            ->where('id', '!=', $userMessage->id)
+            ->latest('id')
+            ->limit(6)
+            ->get()
+            ->reverse()
+            ->values();
+
+        $aiResult = $aiService->ask($validated['message'], $priorHistory);
 
         // 4. Store AI assistant response
         $assistantMessage = $conversation->messages()->create([

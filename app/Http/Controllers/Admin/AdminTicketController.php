@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\SupportTicket;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -17,10 +18,11 @@ class AdminTicketController extends Controller
     public function index(Request $request): View
     {
         $query = SupportTicket::query()
-            ->with(['user', 'conversation'])
+            ->with(['user', 'conversation', 'assignedTo'])
             ->forStatus($request->input('status'))
             ->forCategory($request->input('category'))
             ->forPriority($request->input('priority'))
+            ->forAssignedTo($request->input('assigned_to'))
             ->search($request->input('q'))
             ->latest();
 
@@ -29,6 +31,7 @@ class AdminTicketController extends Controller
         $categories = SupportTicket::CATEGORIES;
         $priorities = SupportTicket::PRIORITIES;
         $statuses = SupportTicket::STATUSES;
+        $admins = User::where('role', 'admin')->orderBy('name')->get();
 
         // Statistics for admin dashboard metrics
         $stats = [
@@ -43,6 +46,7 @@ class AdminTicketController extends Controller
             'categories',
             'priorities',
             'statuses',
+            'admins',
             'stats'
         ));
     }
@@ -52,22 +56,24 @@ class AdminTicketController extends Controller
      */
     public function show(SupportTicket $ticket): View
     {
-        $ticket->load(['user', 'conversation.messages']);
+        $ticket->load(['user', 'conversation.messages', 'assignedTo']);
 
         $priorities = SupportTicket::PRIORITIES;
         $statuses = SupportTicket::STATUSES;
+        $admins = User::where('role', 'admin')->orderBy('name')->get();
 
-        return view('admin.tickets.show', compact('ticket', 'priorities', 'statuses'));
+        return view('admin.tickets.show', compact('ticket', 'priorities', 'statuses', 'admins'));
     }
 
     /**
-     * Update ticket status, priority, and administrator resolution note.
+     * Update ticket status, priority, assigned agent, and administrator resolution note.
      */
     public function update(Request $request, SupportTicket $ticket): RedirectResponse
     {
         $validated = $request->validate([
             'status' => ['required', 'string', Rule::in(SupportTicket::STATUSES)],
             'priority' => ['required', 'string', Rule::in(SupportTicket::PRIORITIES)],
+            'assigned_to' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'admin')],
             'admin_response' => ['nullable', 'string', 'max:10000'],
         ]);
 

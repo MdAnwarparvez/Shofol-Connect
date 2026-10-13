@@ -39,6 +39,8 @@ return [
         'provider' => env('AI_PROVIDER', (env('GEMINI_API_KEY') && !env('AI_API_KEY') && !env('OPENAI_API_KEY') ? 'gemini' : 'openai')),
         'api_key' => env('AI_API_KEY') ?: (env('OPENAI_API_KEY') ?: env('GEMINI_API_KEY')),
         'model' => env('AI_MODEL') ?: ((env('AI_PROVIDER') === 'gemini' || (env('GEMINI_API_KEY') && !env('AI_API_KEY') && !env('OPENAI_API_KEY'))) ? 'gemini-3.8-flash' : 'gpt-4o-mini'),
+        'embedding_model' => env('AI_EMBEDDING_MODEL') ?: ((env('AI_PROVIDER') === 'gemini' || (env('GEMINI_API_KEY') && !env('AI_API_KEY') && !env('OPENAI_API_KEY'))) ? 'gemini-embedding-2' : 'text-embedding-3-small'),
+        'embedding_dimensions' => env('AI_EMBEDDING_DIMENSIONS') ? (int) env('AI_EMBEDDING_DIMENSIONS') : null,
         'base_url' => rtrim(env('AI_BASE_URL') ?: ((env('AI_PROVIDER') === 'gemini' || (env('GEMINI_API_KEY') && !env('AI_API_KEY') && !env('OPENAI_API_KEY'))) ? 'https://generativelanguage.googleapis.com/v1beta/openai' : 'https://api.openai.com/v1'), '/'),
         'timeout' => (int) (env('AI_TIMEOUT') ?: 60),
         'retry_times' => (int) (env('AI_RETRY_TIMES') ?: 2),

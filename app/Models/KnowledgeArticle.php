@@ -41,9 +41,36 @@ class KnowledgeArticle extends Model
         'question',
         'content',
         'keywords',
+        'embedding',
         'status',
         'created_by',
     ];
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'embedding' => 'array',
+        ];
+    }
+
+    /**
+     * Boot model events for cache invalidation.
+     */
+    protected static function booted(): void
+    {
+        static::saved(function () {
+            \Illuminate\Support\Facades\Cache::forget('kb_active_articles');
+        });
+
+        static::deleted(function () {
+            \Illuminate\Support\Facades\Cache::forget('kb_active_articles');
+        });
+    }
 
     /**
      * Get the user who created this knowledge article.

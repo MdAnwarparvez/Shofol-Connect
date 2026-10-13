@@ -107,6 +107,11 @@
                                     <i class="bi bi-ticket-perforated-fill me-1"></i> Manage Tickets
                                 </a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('admin.conversations.*') ? 'active fw-semibold' : '' }}" href="{{ route('admin.conversations.index') }}">
+                                    <i class="bi bi-chat-dots me-1"></i> Conversations
+                                </a>
+                            </li>
                         @endif
                     </ul>
 

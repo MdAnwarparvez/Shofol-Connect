@@ -82,7 +82,7 @@ class AIService
      * @param string $userQuestion
      * @return array{success: bool, answer: string, sources: array, fallback: bool, error?: string}
      */
-    public function ask(string $userQuestion): array
+    public function ask(string $userQuestion, iterable $conversationHistory = []): array
     {
         if (function_exists('set_time_limit') && (!function_exists('app') || !app()->runningUnitTests())) {
             @set_time_limit(180);
@@ -100,8 +100,41 @@ class AIService
             ];
         }
 
+        // Format and bound conversation history (chronological, last 6 messages max, capped per turn)
+        $formattedHistory = [];
+        $lastUserQuery = null;
+
+        foreach ($conversationHistory as $msg) {
+            $role = is_array($msg) ? ($msg['role'] ?? 'user') : ($msg->role ?? 'user');
+            $content = is_array($msg) ? ($msg['content'] ?? '') : ($msg->content ?? '');
+
+            $trimmedContent = trim((string) $content);
+            if (!empty($trimmedContent)) {
+                if ($role === 'user') {
+                    $lastUserQuery = $trimmedContent;
+                }
+                $formattedHistory[] = [
+                    'role' => $role === 'assistant' ? 'assistant' : 'user',
+                    'content' => \Illuminate\Support\Str::limit($trimmedContent, 1000),
+                ];
+            }
+        }
+
+        if (count($formattedHistory) > 6) {
+            $formattedHistory = array_slice($formattedHistory, -6);
+        }
+
         // 1. Retrieve & rank knowledge articles relevant to question
         $retrieval = $this->retrievalService->retrieve($cleanQuestion);
+
+        // If direct follow-up has no matches, but prior conversation has context, try conversational retrieval
+        if (!$retrieval['has_relevant_results'] && !empty($lastUserQuery)) {
+            $contextualQuery = trim($lastUserQuery . ' ' . $cleanQuestion);
+            $contextualRetrieval = $this->retrievalService->retrieve($contextualQuery);
+            if ($contextualRetrieval['has_relevant_results']) {
+                $retrieval = $contextualRetrieval;
+            }
+        }
 
         // 2. Strict Rule: If no relevant articles are found, do not let LLM hallucinate
         if (!$retrieval['has_relevant_results']) {
@@ -128,7 +161,24 @@ class AIService
         // 4. Construct System Prompt with Knowledge Base Context
         $systemPrompt = $this->buildSystemPrompt($retrieval['context']);
 
-        // 5. Call LLM API via Laravel HTTP Client with timeouts and error handling
+        // 5. Assemble multi-turn messages payload preserving system bounds
+        $llmMessages = [
+            [
+                'role' => 'system',
+                'content' => $systemPrompt,
+            ],
+        ];
+
+        foreach ($formattedHistory as $turn) {
+            $llmMessages[] = $turn;
+        }
+
+        $llmMessages[] = [
+            'role' => 'user',
+            'content' => $cleanQuestion,
+        ];
+
+        // 6. Call LLM API via Laravel HTTP Client with timeouts and error handling
         try {
             $response = Http::timeout($this->timeout)
                 ->retry(
@@ -149,16 +199,7 @@ class AIService
                 ])
                 ->post($this->baseUrl . '/chat/completions', [
                     'model' => $this->model,
-                    'messages' => [
-                        [
-                            'role' => 'system',
-                            'content' => $systemPrompt,
-                        ],
-                        [
-                            'role' => 'user',
-                            'content' => $cleanQuestion,
-                        ],
-                    ],
+                    'messages' => $llmMessages,
                     'temperature' => 0.2,
                 ]);
 

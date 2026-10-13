@@ -258,3 +258,60 @@ test('user and admin ticket lists are paginated', function () {
     $adminResp->assertStatus(200);
     $this->assertCount(10, $adminResp->viewData('tickets'));
 });
+
+test('admin can assign a ticket to an administrative staff member and filter by assignee', function () {
+    $adminA = User::factory()->admin()->create(['name' => 'Agent Alpha']);
+    $adminB = User::factory()->admin()->create(['name' => 'Agent Beta']);
+    $user = User::factory()->create();
+
+    $ticket = SupportTicket::factory()->create([
+        'user_id' => $user->id,
+        'assigned_to' => null,
+        'subject' => 'Tax Exemption Certificate Issue',
+    ]);
+
+    // Admin updates assignment
+    $response = $this->actingAs($adminA)->put("/admin/tickets/{$ticket->id}", [
+        'status' => 'In Progress',
+        'priority' => 'High',
+        'assigned_to' => $adminB->id,
+        'admin_response' => 'Assigned to Agent Beta for statutory audit.',
+    ]);
+
+    $response->assertRedirect(route('admin.tickets.show', $ticket));
+    $ticket->refresh();
+    $this->assertEquals($adminB->id, $ticket->assigned_to);
+    $this->assertEquals('Agent Beta', $ticket->assignedTo->name);
+
+    // Filter by assigned agent B
+    $respFilterB = $this->actingAs($adminA)->get('/admin/tickets?assigned_to=' . $adminB->id);
+    $respFilterB->assertStatus(200);
+    $respFilterB->assertSee('Tax Exemption Certificate Issue');
+    $respFilterB->assertSee('Agent Beta');
+
+    // Filter by assigned agent A (should not show ticket)
+    $respFilterA = $this->actingAs($adminA)->get('/admin/tickets?assigned_to=' . $adminA->id);
+    $respFilterA->assertStatus(200);
+    $respFilterA->assertDontSee('Tax Exemption Certificate Issue');
+
+    // Filter unassigned
+    $respUnassigned = $this->actingAs($adminA)->get('/admin/tickets?assigned_to=unassigned');
+    $respUnassigned->assertStatus(200);
+    $respUnassigned->assertDontSee('Tax Exemption Certificate Issue');
+});
+
+test('assigning ticket to a non-admin user fails validation', function () {
+    $admin = User::factory()->admin()->create();
+    $regularUser = User::factory()->create(['role' => 'user']);
+    $ticket = SupportTicket::factory()->create();
+
+    $response = $this->actingAs($admin)->put("/admin/tickets/{$ticket->id}", [
+        'status' => 'Open',
+        'priority' => 'Medium',
+        'assigned_to' => $regularUser->id,
+    ]);
+
+    $response->assertSessionHasErrors('assigned_to');
+    $ticket->refresh();
+    $this->assertNull($ticket->assigned_to);
+});

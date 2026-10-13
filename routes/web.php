@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\Admin\AdminConversationController;
 use App\Http\Controllers\Admin\AdminTicketController;
 use App\Http\Controllers\Admin\FaqController;
 use App\Http\Controllers\Admin\KnowledgeArticleController;
@@ -29,7 +30,9 @@ Route::middleware('auth')->group(function () {
     // AI Support Chat Assistant routes
     Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
     Route::get('/chat/{conversation}', [ChatController::class, 'show'])->name('chat.show');
-    Route::post('/chat/send', [ChatController::class, 'send'])->name('chat.send');
+    Route::post('/chat/send', [ChatController::class, 'send'])
+        ->middleware('throttle:30,1')
+        ->name('chat.send');
     Route::post('/chat/new', [ChatController::class, 'newConversation'])->name('chat.new');
 
     // Conversation History routes
@@ -63,6 +66,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/tickets', [AdminTicketController::class, 'index'])->name('tickets.index');
     Route::get('/tickets/{ticket}', [AdminTicketController::class, 'show'])->name('tickets.show');
     Route::put('/tickets/{ticket}', [AdminTicketController::class, 'update'])->name('tickets.update');
+
+    // AI Conversation Monitoring routes (Admin Portal - SC-AI-34)
+    Route::get('/conversations', [AdminConversationController::class, 'index'])->name('conversations.index');
+    Route::get('/conversations/{conversation}', [AdminConversationController::class, 'show'])->name('conversations.show');
 });
 
 require __DIR__.'/auth.php';

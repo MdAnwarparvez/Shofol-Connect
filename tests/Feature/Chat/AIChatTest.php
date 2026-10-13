@@ -771,3 +771,135 @@ test('chat send AJAX response returns pre-rendered safe content_html for assista
     expect($contentHtml)->toContain('<li>Direct bank transfer</li>');
     expect($contentHtml)->not->toContain('<script>malicious()</script>');
 });
+
+test('multi-turn follow-up question sends chronological conversation history to LLM and preserves knowledge grounding', function () {
+    Config::set('services.ai.api_key', 'test-fake-key');
+
+    $article = KnowledgeArticle::factory()->create([
+        'module' => 'HRM',
+        'category' => 'Leave Policy',
+        'title' => 'Annual & Casual Leave Policy',
+        'question' => 'How do employees apply for annual leave?',
+        'content' => 'Full-time employees receive 14 days annual leave per year. Unused leave can be carried forward up to 7 days.',
+        'keywords' => 'annual leave, casual leave, carry forward, vacation',
+        'status' => 'active',
+    ]);
+
+    $user = User::factory()->create();
+    $conversation = $user->conversations()->create([
+        'title' => 'Leave Policy Discussion',
+    ]);
+
+    // Turn 1 messages
+    $conversation->messages()->create([
+        'role' => 'user',
+        'content' => 'How many days of annual leave do full-time employees receive?',
+    ]);
+    $conversation->messages()->create([
+        'role' => 'assistant',
+        'content' => 'Full-time employees receive 14 days of annual leave per year.',
+    ]);
+
+    $recordedMessages = null;
+
+    Http::fake([
+        '*/chat/completions' => function ($request) use (&$recordedMessages) {
+            $recordedMessages = $request->data()['messages'];
+            return Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => 'Yes, unused annual leave can be carried forward up to 7 days into the subsequent year.',
+                        ],
+                    ],
+                ],
+            ], 200);
+        },
+    ]);
+
+    // Turn 2 follow-up
+    $response = $this->actingAs($user)->postJson('/chat/send', [
+        'conversation_id' => $conversation->id,
+        'message' => 'Can it be carried forward into the next year?',
+    ]);
+
+    $response->assertStatus(200);
+    $response->assertJson([
+        'success' => true,
+        'assistant_message' => [
+            'content' => 'Yes, unused annual leave can be carried forward up to 7 days into the subsequent year.',
+        ],
+    ]);
+
+    // Verify multi-turn payload sent to LLM
+    expect($recordedMessages)->not->toBeNull();
+    expect($recordedMessages[0]['role'])->toEqual('system');
+    expect($recordedMessages[1]['role'])->toEqual('user');
+    expect($recordedMessages[1]['content'])->toContain('How many days of annual leave do full-time employees receive?');
+    expect($recordedMessages[2]['role'])->toEqual('assistant');
+    expect($recordedMessages[2]['content'])->toContain('Full-time employees receive 14 days of annual leave per year.');
+    expect($recordedMessages[3]['role'])->toEqual('user');
+    expect($recordedMessages[3]['content'])->toEqual('Can it be carried forward into the next year?');
+});
+
+test('multi-turn conversation isolation strictly prevents leaking messages across users or separate conversations', function () {
+    Config::set('services.ai.api_key', 'test-fake-key');
+
+    KnowledgeArticle::factory()->create([
+        'module' => 'Accounting',
+        'category' => 'Invoicing',
+        'title' => 'Standard Invoicing Workflow',
+        'question' => 'How to raise client invoices?',
+        'content' => 'Invoices must be raised with net 30 payment terms and GST details.',
+        'keywords' => 'invoice, payment, accounting',
+        'status' => 'active',
+    ]);
+
+    $userA = User::factory()->create();
+    $convA = $userA->conversations()->create(['title' => 'Secret User A Inquiries']);
+    $convA->messages()->create([
+        'role' => 'user',
+        'content' => 'Confidential salary data for Executive Alpha is BDT 500,000.',
+    ]);
+    $convA->messages()->create([
+        'role' => 'assistant',
+        'content' => 'Acknowledged confidential inquiry.',
+    ]);
+
+    $userB = User::factory()->create();
+    $convB = $userB->conversations()->create(['title' => 'User B Session']);
+    $convB->messages()->create([
+        'role' => 'user',
+        'content' => 'How do I raise a client invoice?',
+    ]);
+
+    $recordedMessages = null;
+
+    Http::fake([
+        '*/chat/completions' => function ($request) use (&$recordedMessages) {
+            $recordedMessages = $request->data()['messages'];
+            return Http::response([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => 'Invoices are issued with net 30 payment terms.',
+                        ],
+                    ],
+                ],
+            ], 200);
+        },
+    ]);
+
+    $response = $this->actingAs($userB)->postJson('/chat/send', [
+        'conversation_id' => $convB->id,
+        'message' => 'What are the standard payment terms for invoicing in Accounting?',
+    ]);
+
+    $response->assertStatus(200);
+
+    // Verify User A's confidential messages NEVER leak into User B's LLM prompt
+    $allContent = json_encode($recordedMessages);
+    expect($allContent)->not->toContain('Confidential salary data');
+    expect($allContent)->not->toContain('Executive Alpha');
+    expect($allContent)->not->toContain('Secret User A Inquiries');
+});

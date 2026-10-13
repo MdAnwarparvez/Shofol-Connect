@@ -5,17 +5,24 @@ namespace App\Services;
 use App\Models\Faq;
 use App\Models\KnowledgeArticle;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 class KnowledgeRetrievalService
 {
+    protected ?EmbeddingService $embeddingService;
+
     /**
-     * Stop words to filter out when tokenizing queries for lexical relevance.
+     * Stop words to filter out when tokenizing queries for lexical relevance (English + Bengali).
      */
     protected array $stopWords = [
         'the', 'and', 'for', 'that', 'this', 'with', 'what', 'when', 'where',
         'which', 'who', 'how', 'does', 'can', 'are', 'about', 'from', 'have',
         'has', 'had', 'been', 'will', 'would', 'could', 'should', 'you', 'your',
         'our', 'please', 'tell', 'help', 'give', 'need', 'know', 'some', 'any',
+        // Common Bengali query particles & stopwords
+        'কি', 'কী', 'কীভাবে', 'কিভাবে', 'এবং', 'বা', 'জন্য', 'থেকে', 'কোন', 'কোনো',
+        'এর', 'তে', 'কে', 'এ', 'এই', 'সেই', 'আছে', 'না', 'হয়', 'হবে', 'করতে', 'করা',
+        'দিন', 'নাকি', 'দিয়ে', 'একটি', 'কত',
     ];
 
     /**
@@ -23,8 +30,14 @@ class KnowledgeRetrievalService
      */
     protected int $minimumScoreThreshold = 3;
 
+    public function __construct(?EmbeddingService $embeddingService = null)
+    {
+        $this->embeddingService = $embeddingService ?? (function_exists('app') ? app(EmbeddingService::class) : new EmbeddingService());
+    }
+
     /**
      * Retrieve and rank knowledge articles and verified FAQs relevant to the user query.
+     * Combines lexical keyword matching with vector cosine similarity when embeddings exist.
      *
      * @param string $query
      * @param int $limit
@@ -43,15 +56,47 @@ class KnowledgeRetrievalService
             ];
         }
 
-        // Tokenize query into meaningful search words (length >= 3, non-stopwords)
+        // Tokenize query into meaningful search words (length >= 2, non-stopwords)
         $tokens = $this->extractTokens($normalizedQuery);
+
+        // Fetch active knowledge articles & FAQs from cache
+        $articles = $this->getActiveArticles();
+        $faqs = $this->getActiveFaqs();
+
+        if ($articles->isEmpty() && $faqs->isEmpty()) {
+            return [
+                'articles' => collect(),
+                'has_relevant_results' => false,
+                'context' => '',
+                'sources' => [],
+            ];
+        }
+
+        // Only call embedding API if at least one article or FAQ in the knowledge base has stored embeddings
+        $hasAnyEmbeddings = $articles->contains(fn ($a) => !empty($a->embedding))
+            || $faqs->contains(fn ($f) => !empty($f->embedding));
+
+        $queryEmbedding = null;
+        if ($hasAnyEmbeddings && $this->embeddingService && $this->embeddingService->isConfigured()) {
+            $queryEmbedding = $this->embeddingService->generateEmbedding($query);
+        }
 
         $scoredCandidates = collect();
 
-        // 1. Fetch & score active knowledge articles
-        $articles = KnowledgeArticle::active()->get();
+        // 1. Score active knowledge articles
         foreach ($articles as $article) {
             $score = $this->calculateArticleScore($article, $normalizedQuery, $tokens);
+
+            // Hybrid scoring: incorporate vector cosine similarity if embeddings are present
+            if (!empty($queryEmbedding) && !empty($article->embedding) && is_array($article->embedding)) {
+                $sim = $this->embeddingService->cosineSimilarity($queryEmbedding, $article->embedding);
+                if ($sim >= 0.70) {
+                    $score += (int) round($sim * 35);
+                } elseif ($sim >= 0.45) {
+                    $score += (int) round($sim * 15);
+                }
+            }
+
             if ($score >= $this->minimumScoreThreshold) {
                 $scoredCandidates->push([
                     'type' => 'article',
@@ -63,10 +108,20 @@ class KnowledgeRetrievalService
             }
         }
 
-        // 2. Fetch & score active FAQs
-        $faqs = Faq::active()->with(['shofolModule', 'knowledgeCategory'])->get();
+        // 2. Score active FAQs
         foreach ($faqs as $faq) {
             $score = $this->calculateFaqScore($faq, $normalizedQuery, $tokens);
+
+            // Hybrid scoring: incorporate vector cosine similarity if embeddings are present
+            if (!empty($queryEmbedding) && !empty($faq->embedding) && is_array($faq->embedding)) {
+                $sim = $this->embeddingService->cosineSimilarity($queryEmbedding, $faq->embedding);
+                if ($sim >= 0.70) {
+                    $score += (int) round($sim * 35);
+                } elseif ($sim >= 0.45) {
+                    $score += (int) round($sim * 15);
+                }
+            }
+
             if ($score >= $this->minimumScoreThreshold) {
                 $scoredCandidates->push([
                     'type' => 'faq',
@@ -258,12 +313,12 @@ class KnowledgeRetrievalService
      */
     protected function extractTokens(string $query): array
     {
-        $words = preg_split('/[^\p{L}\p{N}]+/u', $query, -1, PREG_SPLIT_NO_EMPTY);
+        $words = preg_split('/[^\p{L}\p{M}\p{N}]+/u', $query, -1, PREG_SPLIT_NO_EMPTY);
 
         $tokens = [];
         foreach ($words as $word) {
             $w = mb_strtolower($word);
-            if (mb_strlen($w) >= 3 && !in_array($w, $this->stopWords, true)) {
+            if (mb_strlen($w) >= 2 && !in_array($w, $this->stopWords, true)) {
                 $tokens[] = $w;
             }
         }
@@ -328,5 +383,34 @@ class KnowledgeRetrievalService
                 'type' => 'faq',
             ];
         })->values()->toArray();
+    }
+
+    /**
+     * Retrieve active knowledge articles with caching layer.
+     */
+    public function getActiveArticles(): Collection
+    {
+        return Cache::remember('kb_active_articles', 3600, function () {
+            return KnowledgeArticle::active()->get();
+        });
+    }
+
+    /**
+     * Retrieve active FAQs with caching layer.
+     */
+    public function getActiveFaqs(): Collection
+    {
+        return Cache::remember('kb_active_faqs', 3600, function () {
+            return Faq::active()->with(['shofolModule', 'knowledgeCategory'])->get();
+        });
+    }
+
+    /**
+     * Invalidate both knowledge retrieval caches.
+     */
+    public function clearCache(): void
+    {
+        Cache::forget('kb_active_articles');
+        Cache::forget('kb_active_faqs');
     }
 }

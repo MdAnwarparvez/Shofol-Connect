@@ -61,7 +61,7 @@
     <div class="card-body">
         <form method="GET" action="{{ route('admin.tickets.index') }}" class="row g-2 align-items-end">
             <!-- Search Query -->
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label for="searchQuery" class="form-label small fw-semibold mb-1">Search Tickets or Users</label>
                 <div class="input-group">
                     <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
@@ -102,12 +102,24 @@
                 </select>
             </div>
 
+            <!-- Assigned Staff Filter -->
+            <div class="col-md-2">
+                <label for="filterAssigned" class="form-label small fw-semibold mb-1">Assigned Agent</label>
+                <select class="form-select" id="filterAssigned" name="assigned_to">
+                    <option value="">All Staff</option>
+                    <option value="unassigned" {{ request('assigned_to') === 'unassigned' ? 'selected' : '' }}>Unassigned</option>
+                    @foreach($admins as $admin)
+                        <option value="{{ $admin->id }}" {{ request('assigned_to') == $admin->id ? 'selected' : '' }}>{{ $admin->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+
             <!-- Submit & Reset -->
-            <div class="col-md-2 d-flex gap-2">
-                <button type="submit" class="btn btn-dark w-100">
-                    <i class="bi bi-funnel me-1"></i>Filter
+            <div class="col-md-1 d-flex gap-1">
+                <button type="submit" class="btn btn-dark w-100" title="Filter">
+                    <i class="bi bi-funnel"></i>
                 </button>
-                @if(request()->hasAny(['q', 'status', 'category', 'priority']))
+                @if(request()->hasAny(['q', 'status', 'category', 'priority', 'assigned_to']))
                     <a href="{{ route('admin.tickets.index') }}" class="btn btn-outline-secondary" title="Reset Filters">
                         <i class="bi bi-x-circle"></i>
                     </a>
@@ -145,8 +157,9 @@
                         <th scope="col" style="width: 120px;">Category</th>
                         <th scope="col" style="width: 110px;">Priority</th>
                         <th scope="col" style="width: 130px;">Status</th>
-                        <th scope="col" style="width: 140px;">Submitted</th>
-                        <th scope="col" class="text-end" style="width: 110px;">Action</th>
+                        <th scope="col" style="width: 130px;">Assigned</th>
+                        <th scope="col" style="width: 130px;">Submitted</th>
+                        <th scope="col" class="text-end" style="width: 100px;">Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -184,6 +197,17 @@
                                 <span class="badge {{ $ticket->statusBadgeClass }} px-2 py-1">
                                     {{ $ticket->status }}
                                 </span>
+                            </td>
+                            <td class="small">
+                                @if($ticket->assignedTo)
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                        <i class="bi bi-person-check me-1"></i>{{ $ticket->assignedTo->name }}
+                                    </span>
+                                @else
+                                    <span class="badge bg-light text-muted border px-2 py-1">
+                                        Unassigned
+                                    </span>
+                                @endif
                             </td>
                             <td class="small text-muted">
                                 <div>{{ $ticket->created_at->format('M d, Y') }}</div>

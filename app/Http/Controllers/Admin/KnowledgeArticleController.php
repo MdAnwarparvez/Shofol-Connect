@@ -65,6 +65,12 @@ class KnowledgeArticleController extends Controller
 
         $article = KnowledgeArticle::create($validated);
 
+        try {
+            app(\App\Services\EmbeddingService::class)->indexArticle($article);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to auto-index knowledge article: ' . $e->getMessage());
+        }
+
         return redirect()
             ->route('admin.knowledge-articles.index')
             ->with('success', "Knowledge article \"{$article->title}\" was created successfully.");
@@ -104,7 +110,25 @@ class KnowledgeArticleController extends Controller
      */
     public function update(KnowledgeArticleRequest $request, KnowledgeArticle $knowledgeArticle): RedirectResponse
     {
+        $wasContentChanged = $knowledgeArticle->fill($request->validated())->isDirty([
+            'title', 'question', 'content', 'keywords', 'module', 'category',
+        ]);
+
         $knowledgeArticle->update($request->validated());
+
+        if ($wasContentChanged) {
+            $indexed = false;
+            try {
+                $indexed = app(\App\Services\EmbeddingService::class)->indexArticle($knowledgeArticle, true);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Failed to auto-reindex knowledge article: ' . $e->getMessage());
+            }
+
+            // Invalidate stale embedding if content changed but re-indexing failed or unconfigured
+            if (!$indexed) {
+                $knowledgeArticle->updateQuietly(['embedding' => null]);
+            }
+        }
 
         return redirect()
             ->route('admin.knowledge-articles.show', $knowledgeArticle)

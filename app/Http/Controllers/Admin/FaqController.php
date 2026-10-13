@@ -69,6 +69,12 @@ class FaqController extends Controller
 
         $faq = Faq::create($validated);
 
+        try {
+            app(\App\Services\EmbeddingService::class)->indexFaq($faq);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to auto-index FAQ: ' . $e->getMessage());
+        }
+
         return redirect()
             ->route('admin.faqs.index')
             ->with('success', "FAQ \"{$faq->question}\" was created successfully under module \"{$faq->shofolModule->name}\".");
@@ -107,7 +113,25 @@ class FaqController extends Controller
     {
         $validated = $request->validated();
 
+        $wasContentChanged = $faq->fill($validated)->isDirty([
+            'question', 'answer', 'keywords', 'shofol_module_id', 'knowledge_category_id',
+        ]);
+
         $faq->update($validated);
+
+        if ($wasContentChanged) {
+            $indexed = false;
+            try {
+                $indexed = app(\App\Services\EmbeddingService::class)->indexFaq($faq, true);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Failed to auto-reindex FAQ: ' . $e->getMessage());
+            }
+
+            // Invalidate stale embedding if content changed but re-indexing failed or unconfigured
+            if (!$indexed) {
+                $faq->updateQuietly(['embedding' => null]);
+            }
+        }
 
         return redirect()
             ->route('admin.faqs.index')

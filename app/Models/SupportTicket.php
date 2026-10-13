@@ -49,6 +49,7 @@ class SupportTicket extends Model
      */
     protected $fillable = [
         'user_id',
+        'assigned_to',
         'conversation_id',
         'subject',
         'description',
@@ -85,6 +86,14 @@ class SupportTicket extends Model
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(Conversation::class);
+    }
+
+    /**
+     * The administrative staff member assigned to resolve this ticket.
+     */
+    public function assignedTo(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
     }
 
     /**
@@ -134,6 +143,21 @@ class SupportTicket extends Model
     {
         if (!empty($priority) && in_array($priority, self::PRIORITIES, true)) {
             return $query->where('priority', $priority);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Scope for assigned staff filter.
+     */
+    public function scopeForAssignedTo(Builder $query, mixed $assignedTo): Builder
+    {
+        if ($assignedTo !== null && $assignedTo !== '') {
+            if ($assignedTo === 'unassigned') {
+                return $query->whereNull('assigned_to');
+            }
+            return $query->where('assigned_to', $assignedTo);
         }
 
         return $query;
