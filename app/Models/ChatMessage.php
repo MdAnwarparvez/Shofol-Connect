@@ -57,4 +57,20 @@ class ChatMessage extends Model
     {
         return $this->role === 'assistant';
     }
+
+    /**
+     * Check if the assistant message is eligible for a support ticket escalation CTA.
+     */
+    public function isSupportTicketEligible(): bool
+    {
+        if (!$this->isAssistant()) {
+            return false;
+        }
+
+        $lowerContent = mb_strtolower($this->content);
+
+        return str_contains($lowerContent, 'support ticket')
+            || str_contains($lowerContent, 'support team')
+            || str_contains($lowerContent, 'contact support');
+    }
 }

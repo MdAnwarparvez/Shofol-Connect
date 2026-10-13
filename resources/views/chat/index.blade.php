@@ -104,6 +104,65 @@
         border-radius: 1rem;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
     }
+    .markdown-content {
+        line-height: 1.6;
+        word-break: break-word;
+    }
+    .markdown-content p:last-child {
+        margin-bottom: 0;
+    }
+    .markdown-content ul, .markdown-content ol {
+        margin-top: 0.25rem;
+        margin-bottom: 0.5rem;
+        padding-left: 1.25rem;
+    }
+    .markdown-content li {
+        margin-bottom: 0.2rem;
+    }
+    .markdown-content h1, .markdown-content h2, .markdown-content h3,
+    .markdown-content h4, .markdown-content h5, .markdown-content h6 {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin-top: 0.5rem;
+        margin-bottom: 0.35rem;
+        color: #0f172a;
+    }
+    .markdown-content pre {
+        background: #f1f5f9;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.375rem;
+        overflow-x: auto;
+        font-size: 0.85rem;
+        margin-top: 0.35rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid #e2e8f0;
+    }
+    .markdown-content code {
+        background: #f1f5f9;
+        color: #0f172a;
+        padding: 0.15rem 0.3rem;
+        border-radius: 0.25rem;
+        font-size: 0.875em;
+        font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .markdown-content pre code {
+        background: transparent;
+        padding: 0;
+        border: 0;
+    }
+    .markdown-content a {
+        color: #0d6efd;
+        text-decoration: underline;
+    }
+    .markdown-content a:hover {
+        color: #0a58ca;
+    }
+    .markdown-content blockquote {
+        border-left: 3px solid #cbd5e1;
+        padding-left: 0.75rem;
+        margin: 0.5rem 0;
+        color: #64748b;
+    }
 </style>
 @endsection
 
@@ -208,7 +267,20 @@
                                     </span>
                                 </div>
                             @endif
-                            {!! nl2br(e($msg->content)) !!}
+                            @if($msg->role === 'assistant')
+                                <div class="markdown-content">
+                                    {!! \Illuminate\Support\Str::markdown($msg->content, ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
+                                </div>
+                                @if($msg->isSupportTicketEligible())
+                                    <div class="mt-2 pt-2 border-top">
+                                        <a href="{{ route('tickets.create', ['conversation_id' => $conversation->id]) }}" class="btn btn-sm btn-outline-warning text-dark fw-semibold">
+                                            <i class="bi bi-ticket-perforated me-1 text-danger"></i>Create Support Ticket from this Inquiry
+                                        </a>
+                                    </div>
+                                @endif
+                            @else
+                                <div>{!! nl2br(e($msg->content)) !!}</div>
+                            @endif
                         </div>
                         @if($msg->role === 'assistant' && !empty($msg->sources))
                             <div class="sources-box">
@@ -253,15 +325,16 @@
                 <input type="hidden" name="conversation_id" id="conversationId" value="{{ $conversation->id }}">
 
                 <div class="input-group">
-                    <input
-                        type="text"
+                    <textarea
                         name="message"
                         id="messageInput"
                         class="form-control py-2 px-3"
                         placeholder="Ask a question about HRM, Payroll, CRM, or Accounting..."
-                        autocomplete="off"
+                        rows="1"
+                        maxlength="1000"
+                        style="resize: none; overflow-y: hidden; min-height: 42px; max-height: 160px; line-height: 1.5;"
                         required
-                    >
+                    ></textarea>
                     <button type="submit" id="sendBtn" class="btn btn-primary px-4 d-flex align-items-center gap-2">
                         <span id="sendBtnText">Send</span>
                         <i id="sendBtnIcon" class="bi bi-send-fill"></i>
@@ -271,7 +344,7 @@
             </form>
             <div class="d-flex justify-content-between align-items-center mt-2 px-1 text-muted" style="font-size: 0.75rem;">
                 <span>Responses are strictly grounded in Shofol Connect documentation.</span>
-                <span>Press Enter to send</span>
+                <span>Press Enter to send, Shift + Enter for new line</span>
             </div>
         </div>
     </div>
@@ -292,15 +365,33 @@
     const errorMessage = document.getElementById('errorMessage');
     const conversationIdInput = document.getElementById('conversationId');
 
+    let isSubmitting = false;
+
     // Scroll to bottom on load
     function scrollToBottom() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
     scrollToBottom();
 
+    // Auto-resize textarea according to content (min 42px, max 160px)
+    function autoResizeInput() {
+        if (!messageInput) return;
+        messageInput.style.height = 'auto';
+        const newHeight = Math.min(Math.max(messageInput.scrollHeight, 42), 160);
+        messageInput.style.height = newHeight + 'px';
+        if (messageInput.scrollHeight > 160) {
+            messageInput.style.overflowY = 'auto';
+        } else {
+            messageInput.style.overflowY = 'hidden';
+        }
+    }
+
+    messageInput.addEventListener('input', autoResizeInput);
+
     // Populate suggested prompt into input
     function fillPrompt(text) {
         messageInput.value = text;
+        autoResizeInput();
         messageInput.focus();
     }
 
@@ -313,6 +404,115 @@
         errorAlert.classList.remove('d-none');
     }
 
+    // Escape raw HTML entities
+    function escapeHtml(string) {
+        if (!string) return '';
+        const div = document.createElement('div');
+        div.innerText = string;
+        return div.innerHTML;
+    }
+
+    // Safe client-side Markdown parser (escapes HTML first to prevent XSS)
+    function renderSafeMarkdown(text) {
+        if (!text) return '';
+
+        // Step 1: Escape all HTML entities first
+        let safe = escapeHtml(text);
+
+        // Step 2: Code blocks (```lang ... ```)
+        safe = safe.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, function(match, lang, code) {
+            return `<pre><code class="language-${lang || 'plaintext'}">${code.trim()}</code></pre>`;
+        });
+
+        // Step 3: Inline code (`code`)
+        safe = safe.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+        // Step 4: Headings (#, ##, ###)
+        safe = safe.replace(/^### (.*$)/gim, '<h6>$1</h6>');
+        safe = safe.replace(/^## (.*$)/gim, '<h5>$1</h5>');
+        safe = safe.replace(/^# (.*$)/gim, '<h4>$1</h4>');
+
+        // Step 5: Bold & Italic
+        safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        safe = safe.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        safe = safe.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        safe = safe.replace(/_([^_]+)_/g, '<em>$1</em>');
+
+        // Step 6: Safe links [text](url) where url is http, https, or relative
+        safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+|\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+        // Step 7: Lists (unordered: -, *; ordered: 1., 2.)
+        const lines = safe.split('\n');
+        let inUl = false;
+        let inOl = false;
+        const processedLines = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const ulMatch = line.match(/^(\s*)[-*]\s+(.*)$/);
+            const olMatch = line.match(/^(\s*)\d+\.\s+(.*)$/);
+
+            if (ulMatch) {
+                if (!inUl) {
+                    if (inOl) { processedLines.push('</ol>'); inOl = false; }
+                    processedLines.push('<ul>');
+                    inUl = true;
+                }
+                processedLines.push(`<li>${ulMatch[2]}</li>`);
+            } else if (olMatch) {
+                if (!inOl) {
+                    if (inUl) { processedLines.push('</ul>'); inUl = false; }
+                    processedLines.push('<ol>');
+                    inOl = true;
+                }
+                processedLines.push(`<li>${olMatch[2]}</li>`);
+            } else {
+                if (inUl) { processedLines.push('</ul>'); inUl = false; }
+                if (inOl) { processedLines.push('</ol>'); inOl = false; }
+                processedLines.push(line);
+            }
+        }
+        if (inUl) processedLines.push('</ul>');
+        if (inOl) processedLines.push('</ol>');
+
+        safe = processedLines.join('\n');
+
+        // Step 8: Clean paragraph breaks and line breaks outside structural tags
+        return safe
+            .replace(/\n\n+/g, '</p><p>')
+            .replace(/\n/g, '<br>')
+            .replace(/<p><\/p>/g, '')
+            .replace(/<br>(?=<\/?(ul|ol|li|pre|h4|h5|h6))/g, '')
+            .replace(/(<\/?(ul|ol|li|pre|h4|h5|h6)[^>]*>)<br>/g, '$1');
+    }
+
+    // Sanitize pre-rendered server HTML
+    function sanitizeHtml(html) {
+        if (!html) return '';
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        // Remove dangerous tags
+        doc.querySelectorAll('script, iframe, object, embed, style').forEach(el => el.remove());
+        // Remove dangerous event attributes and validate links
+        doc.querySelectorAll('*').forEach(el => {
+            for (const attr of el.getAttributeNames()) {
+                if (attr.toLowerCase().startsWith('on') || attr.toLowerCase() === 'srcdoc') {
+                    el.removeAttribute(attr);
+                }
+            }
+            if (el.tagName === 'A') {
+                const href = (el.getAttribute('href') || '').trim();
+                if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('/') && !href.startsWith('#')) {
+                    el.removeAttribute('href');
+                } else {
+                    el.setAttribute('target', '_blank');
+                    el.setAttribute('rel', 'noopener noreferrer');
+                }
+            }
+        });
+        return doc.body.innerHTML;
+    }
+
     // Append a user message element
     function appendUserMessage(text, time) {
         const row = document.createElement('div');
@@ -322,7 +522,7 @@
                 <i class="bi bi-person-fill"></i>
             </div>
             <div>
-                <div class="message-bubble user">${escapeHtml(text)}</div>
+                <div class="message-bubble user">${escapeHtml(text).replace(/\n/g, '<br>')}</div>
                 <div class="text-muted small mt-1 text-end" style="font-size: 0.75rem;">${time || 'Just now'}</div>
             </div>
         `;
@@ -332,12 +532,12 @@
     }
 
     // Append an assistant message element
-    function appendAssistantMessage(text, sources, time, isFallback, convId, isPolicyFallback) {
+    function appendAssistantMessage(text, sources, time, isFallback, convId, isPolicyFallback, htmlContent) {
         const row = document.createElement('div');
         row.className = 'message-row assistant';
 
         let badgeHtml = '';
-        if (isPolicyFallback || text.includes('Verified Policy:')) {
+        if (isPolicyFallback || (text && text.includes('Verified Policy:'))) {
             badgeHtml = `
                 <div class="mb-2">
                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
@@ -370,6 +570,9 @@
             `;
         }
 
+        // Render safe markdown (using sanitized server HTML or safe client-side fallback)
+        const renderedContent = htmlContent ? sanitizeHtml(htmlContent) : renderSafeMarkdown(text);
+
         row.innerHTML = `
             <div class="avatar-icon avatar-assistant">
                 <i class="bi bi-robot"></i>
@@ -377,7 +580,7 @@
             <div>
                 <div class="message-bubble assistant">
                     ${badgeHtml}
-                    <div>${escapeHtml(text).replace(/\\n/g, '<br>')}</div>
+                    <div class="markdown-content">${renderedContent}</div>
                     ${fallbackButtonHtml}
                 </div>
                 ${sourcesHtml}
@@ -386,12 +589,6 @@
         `;
         chatMessages.insertBefore(row, typingIndicator);
         scrollToBottom();
-    }
-
-    function escapeHtml(string) {
-        const div = document.createElement('div');
-        div.innerText = string;
-        return div.innerHTML;
     }
 
     function setLoading(isLoading) {
@@ -414,16 +611,33 @@
         }
     }
 
+    // Keyboard handler: Enter to submit, Shift+Enter for newline
+    messageInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (isSubmitting || !messageInput.value.trim()) {
+                return;
+            }
+            if (typeof chatForm.requestSubmit === 'function') {
+                chatForm.requestSubmit();
+            } else {
+                chatForm.dispatchEvent(new Event('submit', { cancelable: true }));
+            }
+        }
+    });
+
     // Form submit via AJAX fetch
     chatForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         dismissError();
 
         const message = messageInput.value.trim();
-        if (!message) return;
+        if (!message || isSubmitting) return;
 
+        isSubmitting = true;
         appendUserMessage(message, new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         messageInput.value = '';
+        autoResizeInput();
         setLoading(true);
 
         try {
@@ -470,7 +684,8 @@
                     data.assistant_message.created_at,
                     data.assistant_message.fallback,
                     data.conversation_id || conversationIdInput.value,
-                    data.assistant_message.is_policy_fallback
+                    data.assistant_message.is_policy_fallback,
+                    data.assistant_message.content_html
                 );
             } else {
                 throw new Error('Unexpected response format from server.');
@@ -479,6 +694,7 @@
             console.error(err);
             showError('The AI assistant is temporarily unavailable. Please try again in a moment or open a support ticket.');
         } finally {
+            isSubmitting = false;
             setLoading(false);
             scrollToBottom();
         }

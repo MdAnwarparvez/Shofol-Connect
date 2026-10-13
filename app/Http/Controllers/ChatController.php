@@ -132,6 +132,10 @@ class ChatController extends Controller
                     'id' => $assistantMessage->id,
                     'role' => $assistantMessage->role,
                     'content' => $assistantMessage->content,
+                    'content_html' => Str::markdown($assistantMessage->content, [
+                        'html_input' => 'strip',
+                        'allow_unsafe_links' => false,
+                    ]),
                     'sources' => $assistantMessage->sources ?? [],
                     'fallback' => $aiResult['fallback'] ?? false,
                     'is_policy_fallback' => $aiResult['is_policy_fallback'] ?? false,

@@ -630,3 +630,144 @@ test('does not retry authentication errors or invalid models', function () {
     $this->assertSame('AUTH_ERROR', $result['error']);
     $this->assertSame(1, $callCount);
 });
+
+test('historical assistant fallback message renders support ticket CTA button for owner but not for user messages or non-fallback assistant messages', function () {
+    $userA = User::factory()->create();
+    $userB = User::factory()->create();
+
+    $conversation = $userA->conversations()->create([
+        'title' => 'Custom Payroll Exception',
+    ]);
+
+    // Message 1: User message (ineligible)
+    $msg1 = $conversation->messages()->create([
+        'role' => 'user',
+        'content' => 'Can we apply an undocumented tax deduction rate?',
+    ]);
+
+    // Message 2: Eligible assistant fallback message
+    $msg2 = $conversation->messages()->create([
+        'role' => 'assistant',
+        'content' => AIService::FALLBACK_MESSAGE,
+        'sources' => [],
+    ]);
+
+    // Message 3: Normal grounded assistant message (ineligible)
+    $msg3 = $conversation->messages()->create([
+        'role' => 'assistant',
+        'content' => 'Full-time employees receive 14 annual leave days per year according to HRM guidelines.',
+        'sources' => [],
+    ]);
+
+    // Assert helper method behavior
+    expect($msg1->isSupportTicketEligible())->toBeFalse();
+    expect($msg2->isSupportTicketEligible())->toBeTrue();
+    expect($msg3->isSupportTicketEligible())->toBeFalse();
+
+    // Acting as conversation owner User A
+    $responseA = $this->actingAs($userA)->get("/chat/{$conversation->id}");
+    $responseA->assertStatus(200);
+
+    // Verify historical CTA button is rendered for the eligible assistant message
+    $responseA->assertSee('Create Support Ticket from this Inquiry');
+    $responseA->assertSee(route('tickets.create', ['conversation_id' => $conversation->id]));
+
+    // Verify that the CTA button appears in the message bubble (1 in bubble, 1 in JS template)
+    $content = $responseA->getContent();
+    $messagesHtml = strstr($content, '<script>', true) ?: $content;
+    $this->assertSame(1, substr_count($messagesHtml, 'Create Support Ticket from this Inquiry'));
+
+    // Authorization & ownership guard: User B cannot access User A conversation
+    $responseB = $this->actingAs($userB)->get("/chat/{$conversation->id}");
+    $responseB->assertStatus(403);
+});
+
+test('chat view renders safe markdown for assistant messages, strips raw HTML, and preserves Bengali text', function () {
+    $user = User::factory()->create();
+    $conversation = $user->conversations()->create([
+        'title' => 'Markdown Policy Display',
+    ]);
+
+    $markdownContent = "# HRM Leave Overview\n\n**Annual Leave**: 14 days per calendar year.\n\n- Casual Leave: 10 days\n- Sick Leave: 14 days\n\nস্বাগতম Shofol Connect\n\n```php\n\$status = 'approved';\n```\n\n[Safe Portal](https://shofolconnect.com) and [Dangerous](javascript:alert(1))\n\n<script>alert('xss')</script>";
+
+    $conversation->messages()->create([
+        'role' => 'assistant',
+        'content' => $markdownContent,
+        'sources' => [],
+    ]);
+
+    $response = $this->actingAs($user)->get("/chat/{$conversation->id}");
+    $response->assertStatus(200);
+
+    // Verify safe structural Markdown elements are rendered into HTML
+    $response->assertSee('<h1>HRM Leave Overview</h1>', false);
+    $response->assertSee('<strong>Annual Leave</strong>', false);
+    $response->assertSee('<li>Casual Leave: 10 days</li>', false);
+    $response->assertSee('<li>Sick Leave: 14 days</li>', false);
+    $response->assertSee('স্বাগতম Shofol Connect');
+    $response->assertSee('<pre><code', false);
+    $response->assertSee('<a href="https://shofolconnect.com">Safe Portal</a>', false);
+
+    // Verify raw unsafe HTML is sanitized and executable script tags are stripped
+    $response->assertDontSee('<script>alert(\'xss\')</script>', false);
+    $response->assertDontSee('javascript:alert(1)', false);
+});
+
+test('chat view renders auto-resizing textarea input with keyboard shortcut instructions', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->get('/chat');
+
+    $response->assertStatus(200);
+    $response->assertSee('<textarea', false);
+    $response->assertSee('id="messageInput"', false);
+    $response->assertSee('name="message"', false);
+    $response->assertSee('Press Enter to send, Shift + Enter for new line');
+});
+
+test('chat send AJAX response returns pre-rendered safe content_html for assistant message', function () {
+    Config::set('services.ai.api_key', 'test-valid-key');
+
+    KnowledgeArticle::factory()->create([
+        'module' => 'Payroll',
+        'category' => 'Salary & Tax',
+        'title' => 'Payroll Disbursement Schedule',
+        'content' => 'Salary disbursement occurs on final working day.',
+        'status' => 'active',
+    ]);
+
+    $assistantMarkdown = "### Payroll Guidelines\n\n**Disbursement Date**: Final working day of each month.\n\n- Direct bank transfer\n- Digital payslip access\n\n<script>malicious()</script>";
+
+    Http::fake([
+        '*/chat/completions' => Http::response([
+            'choices' => [
+                [
+                    'message' => [
+                        'content' => $assistantMarkdown,
+                    ],
+                ],
+            ],
+        ], 200),
+    ]);
+
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->postJson('/chat/send', [
+        'message' => 'What is the payroll disbursement schedule in Payroll?',
+    ]);
+
+    $response->assertStatus(200);
+    $response->assertJson([
+        'success' => true,
+        'assistant_message' => [
+            'content' => $assistantMarkdown,
+        ],
+    ]);
+
+    $contentHtml = $response->json('assistant_message.content_html');
+    expect($contentHtml)->not->toBeEmpty();
+    expect($contentHtml)->toContain('<h3>Payroll Guidelines</h3>');
+    expect($contentHtml)->toContain('<strong>Disbursement Date</strong>');
+    expect($contentHtml)->toContain('<li>Direct bank transfer</li>');
+    expect($contentHtml)->not->toContain('<script>malicious()</script>');
+});
