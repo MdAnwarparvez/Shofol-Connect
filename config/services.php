@@ -42,9 +42,11 @@ return [
         'embedding_model' => env('AI_EMBEDDING_MODEL') ?: ((env('AI_PROVIDER') === 'gemini' || (env('GEMINI_API_KEY') && !env('AI_API_KEY') && !env('OPENAI_API_KEY'))) ? 'gemini-embedding-2' : 'text-embedding-3-small'),
         'embedding_dimensions' => env('AI_EMBEDDING_DIMENSIONS') ? (int) env('AI_EMBEDDING_DIMENSIONS') : null,
         'base_url' => rtrim(env('AI_BASE_URL') ?: ((env('AI_PROVIDER') === 'gemini' || (env('GEMINI_API_KEY') && !env('AI_API_KEY') && !env('OPENAI_API_KEY'))) ? 'https://generativelanguage.googleapis.com/v1beta/openai' : 'https://api.openai.com/v1'), '/'),
-        'timeout' => (int) (env('AI_TIMEOUT') ?: 60),
-        'retry_times' => (int) (env('AI_RETRY_TIMES') ?: 2),
-        'retry_delay' => (int) env('AI_RETRY_DELAY', 1000),
+        'timeout' => (int) env('AI_TIMEOUT', 15),
+        'connect_timeout' => (int) env('AI_CONNECT_TIMEOUT', 5),
+        'retry_times' => (int) env('AI_RETRY_TIMES', 1),
+        'retry_delay' => (int) env('AI_RETRY_DELAY', 500),
+        'max_tokens' => (int) env('AI_MAX_TOKENS', 800),
     ],
 
 ];

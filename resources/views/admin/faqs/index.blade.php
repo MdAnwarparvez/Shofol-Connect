@@ -88,7 +88,7 @@
     <div class="card-body">
         <form method="GET" action="{{ route('admin.faqs.index') }}" class="row g-2 align-items-end">
             <!-- Search Query -->
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label for="searchQuery" class="form-label small fw-semibold mb-1">Search FAQs</label>
                 <div class="input-group">
                     <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
@@ -133,9 +133,9 @@
             </div>
 
             <!-- Action Buttons -->
-            <div class="col-md-1 d-flex gap-1">
-                <button type="submit" class="btn btn-primary w-100" title="Apply Filters">
-                    <i class="bi bi-filter"></i>
+            <div class="col-md-2 d-flex gap-1">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-filter me-1"></i> Filter
                 </button>
                 @if(request()->filled('q') || request()->filled('module_id') || request()->filled('module') || request()->filled('category_id') || request()->filled('category') || (request()->filled('status') && in_array(request('status'), ['active', 'inactive', '1', '0'], true)))
                     <a href="{{ route('admin.faqs.index') }}" class="btn btn-outline-secondary" title="Reset Filters">

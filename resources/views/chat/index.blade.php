@@ -646,12 +646,13 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
+                    'Accept': 'text/event-stream, application/json',
                     'X-CSRF-TOKEN': csrfToken,
                 },
                 body: JSON.stringify({
                     message: message,
                     conversation_id: conversationIdInput.value,
+                    stream: true,
                 })
             });
 
@@ -660,35 +661,136 @@
                 throw new Error(errData.message || `Server error (${response.status})`);
             }
 
-            const data = await response.json();
+            const contentType = response.headers.get('content-type') || '';
 
-            if (data.conversation_id) {
-                conversationIdInput.value = data.conversation_id;
-                const escalateBtn = document.getElementById('escalateTicketBtn');
-                if (escalateBtn) {
-                    escalateBtn.href = "{{ route('tickets.create') }}?conversation_id=" + encodeURIComponent(data.conversation_id);
+            if (contentType.includes('text/event-stream') && response.body) {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
+                let accumulatedText = '';
+                let liveRow = null;
+                let contentEl = null;
+
+                function getOrCreateLiveRow() {
+                    if (liveRow) return { liveRow, contentEl };
+                    typingIndicator.style.display = 'none';
+                    liveRow = document.createElement('div');
+                    liveRow.className = 'message-row assistant';
+                    liveRow.innerHTML = `
+                        <div class="avatar-icon avatar-assistant">
+                            <i class="bi bi-robot"></i>
+                        </div>
+                        <div>
+                            <div class="message-bubble assistant">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle mb-2 d-inline-flex align-items-center gap-1">
+                                    <i class="bi bi-shield-check"></i> Verified Shofol Connect Assistant
+                                </span>
+                                <div class="markdown-content"></div>
+                            </div>
+                            <div class="text-muted small mt-1" style="font-size: 0.75rem;">Generating response...</div>
+                        </div>
+                    `;
+                    contentEl = liveRow.querySelector('.markdown-content');
+                    chatMessages.insertBefore(liveRow, typingIndicator);
+                    scrollToBottom();
+                    return { liveRow, contentEl };
                 }
-            }
 
-            if (data.conversation_title) {
-                const titleSpan = document.getElementById('activeConversationTitle');
-                if (titleSpan) {
-                    titleSpan.textContent = data.conversation_title;
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    let currentEvent = 'message';
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed) {
+                            currentEvent = 'message';
+                            continue;
+                        }
+                        if (trimmed.startsWith('event: ')) {
+                            currentEvent = trimmed.substring(7);
+                            continue;
+                        }
+                        if (trimmed.startsWith('data: ')) {
+                            const rawData = trimmed.substring(6);
+                            let dataObj;
+                            try { dataObj = JSON.parse(rawData); } catch(e) { dataObj = rawData; }
+
+                            if (currentEvent === 'token' && dataObj && dataObj.token) {
+                                accumulatedText += dataObj.token;
+                                const { contentEl } = getOrCreateLiveRow();
+                                contentEl.innerHTML = renderSafeMarkdown(accumulatedText);
+                                scrollToBottom();
+                            } else if (currentEvent === 'user_message' && dataObj && dataObj.conversation_id) {
+                                conversationIdInput.value = dataObj.conversation_id;
+                            } else if (currentEvent === 'done' && dataObj) {
+                                if (liveRow) {
+                                    liveRow.remove();
+                                    liveRow = null;
+                                }
+                                if (dataObj.conversation_id) {
+                                    conversationIdInput.value = dataObj.conversation_id;
+                                    const escalateBtn = document.getElementById('escalateTicketBtn');
+                                    if (escalateBtn) {
+                                        escalateBtn.href = "{{ route('tickets.create') }}?conversation_id=" + encodeURIComponent(dataObj.conversation_id);
+                                    }
+                                }
+                                if (dataObj.conversation_title) {
+                                    const titleSpan = document.getElementById('activeConversationTitle');
+                                    if (titleSpan) {
+                                        titleSpan.textContent = dataObj.conversation_title;
+                                    }
+                                }
+                                if (dataObj.assistant_message) {
+                                    appendAssistantMessage(
+                                        dataObj.assistant_message.content,
+                                        dataObj.assistant_message.sources,
+                                        dataObj.assistant_message.created_at,
+                                        dataObj.assistant_message.fallback,
+                                        dataObj.conversation_id || conversationIdInput.value,
+                                        dataObj.assistant_message.is_policy_fallback,
+                                        dataObj.assistant_message.content_html
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
-            }
-
-            if (data.assistant_message) {
-                appendAssistantMessage(
-                    data.assistant_message.content,
-                    data.assistant_message.sources,
-                    data.assistant_message.created_at,
-                    data.assistant_message.fallback,
-                    data.conversation_id || conversationIdInput.value,
-                    data.assistant_message.is_policy_fallback,
-                    data.assistant_message.content_html
-                );
             } else {
-                throw new Error('Unexpected response format from server.');
+                const data = await response.json();
+
+                if (data.conversation_id) {
+                    conversationIdInput.value = data.conversation_id;
+                    const escalateBtn = document.getElementById('escalateTicketBtn');
+                    if (escalateBtn) {
+                        escalateBtn.href = "{{ route('tickets.create') }}?conversation_id=" + encodeURIComponent(data.conversation_id);
+                    }
+                }
+
+                if (data.conversation_title) {
+                    const titleSpan = document.getElementById('activeConversationTitle');
+                    if (titleSpan) {
+                        titleSpan.textContent = data.conversation_title;
+                    }
+                }
+
+                if (data.assistant_message) {
+                    appendAssistantMessage(
+                        data.assistant_message.content,
+                        data.assistant_message.sources,
+                        data.assistant_message.created_at,
+                        data.assistant_message.fallback,
+                        data.conversation_id || conversationIdInput.value,
+                        data.assistant_message.is_policy_fallback,
+                        data.assistant_message.content_html
+                    );
+                } else {
+                    throw new Error('Unexpected response format from server.');
+                }
             }
         } catch (err) {
             console.error(err);

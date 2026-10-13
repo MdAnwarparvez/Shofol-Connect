@@ -6,6 +6,7 @@ use App\Models\Faq;
 use App\Models\KnowledgeArticle;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class KnowledgeRetrievalService
 {
@@ -19,6 +20,8 @@ class KnowledgeRetrievalService
         'which', 'who', 'how', 'does', 'can', 'are', 'about', 'from', 'have',
         'has', 'had', 'been', 'will', 'would', 'could', 'should', 'you', 'your',
         'our', 'please', 'tell', 'help', 'give', 'need', 'know', 'some', 'any',
+        'to', 'in', 'of', 'on', 'at', 'is', 'an', 'be', 'do', 'or', 'a', 'by',
+        'as', 'it', 'my', 'me', 'we', 'they', 'them', 'their', 'us',
         // Common Bengali query particles & stopwords
         'কি', 'কী', 'কীভাবে', 'কিভাবে', 'এবং', 'বা', 'জন্য', 'থেকে', 'কোন', 'কোনো',
         'এর', 'তে', 'কে', 'এ', 'এই', 'সেই', 'আছে', 'না', 'হয়', 'হবে', 'করতে', 'করা',
@@ -45,6 +48,7 @@ class KnowledgeRetrievalService
      */
     public function retrieve(string $query, int $limit = 3): array
     {
+        $retrievalStart = microtime(true);
         $normalizedQuery = trim(mb_strtolower($query));
 
         if (empty($normalizedQuery)) {
@@ -72,27 +76,50 @@ class KnowledgeRetrievalService
             ];
         }
 
-        // Only call embedding API if at least one article or FAQ in the knowledge base has stored embeddings
+        // 1. Calculate lexical scores first for all cached items
+        $articleLexScores = [];
+        $maxLexicalScore = 0;
+        foreach ($articles as $article) {
+            $lex = $this->calculateArticleScore($article, $normalizedQuery, $tokens);
+            $articleLexScores[$article->id] = $lex;
+            if ($lex > $maxLexicalScore) {
+                $maxLexicalScore = $lex;
+            }
+        }
+
+        $faqLexScores = [];
+        foreach ($faqs as $faq) {
+            $lex = $this->calculateFaqScore($faq, $normalizedQuery, $tokens);
+            $faqLexScores[$faq->id] = $lex;
+            if ($lex > $maxLexicalScore) {
+                $maxLexicalScore = $lex;
+            }
+        }
+
+        // 2. Determine if remote query embedding generation is necessary
+        // When lexical search already yields high confidence match (>= 30, direct phrase or multiple strong keywords),
+        // we bypass the external embedding API call entirely, saving ~1.3s network latency.
         $hasAnyEmbeddings = $articles->contains(fn ($a) => !empty($a->embedding))
             || $faqs->contains(fn ($f) => !empty($f->embedding));
 
+        $bypassEmbedding = ($maxLexicalScore >= 30);
         $queryEmbedding = null;
-        if ($hasAnyEmbeddings && $this->embeddingService && $this->embeddingService->isConfigured()) {
+
+        if (!$bypassEmbedding && $hasAnyEmbeddings && $this->embeddingService && $this->embeddingService->isConfigured()) {
             $queryEmbedding = $this->embeddingService->generateEmbedding($query);
         }
 
         $scoredCandidates = collect();
 
-        // 1. Score active knowledge articles
+        // 3. Assemble scored candidates with hybrid vector boost if embeddings exist
         foreach ($articles as $article) {
-            $score = $this->calculateArticleScore($article, $normalizedQuery, $tokens);
+            $score = $articleLexScores[$article->id] ?? 0;
 
-            // Hybrid scoring: incorporate vector cosine similarity if embeddings are present
             if (!empty($queryEmbedding) && !empty($article->embedding) && is_array($article->embedding)) {
                 $sim = $this->embeddingService->cosineSimilarity($queryEmbedding, $article->embedding);
                 if ($sim >= 0.70) {
                     $score += (int) round($sim * 35);
-                } elseif ($sim >= 0.45) {
+                } elseif ($sim >= 0.65) {
                     $score += (int) round($sim * 15);
                 }
             }
@@ -108,16 +135,14 @@ class KnowledgeRetrievalService
             }
         }
 
-        // 2. Score active FAQs
         foreach ($faqs as $faq) {
-            $score = $this->calculateFaqScore($faq, $normalizedQuery, $tokens);
+            $score = $faqLexScores[$faq->id] ?? 0;
 
-            // Hybrid scoring: incorporate vector cosine similarity if embeddings are present
             if (!empty($queryEmbedding) && !empty($faq->embedding) && is_array($faq->embedding)) {
                 $sim = $this->embeddingService->cosineSimilarity($queryEmbedding, $faq->embedding);
                 if ($sim >= 0.70) {
                     $score += (int) round($sim * 35);
-                } elseif ($sim >= 0.45) {
+                } elseif ($sim >= 0.65) {
                     $score += (int) round($sim * 15);
                 }
             }
@@ -133,10 +158,10 @@ class KnowledgeRetrievalService
             }
         }
 
-        // 3. Sort candidates by relevance score descending
+        // 4. Sort candidates by relevance score descending
         $sorted = $scoredCandidates->sortByDesc('score');
 
-        // 4. Deduplicate to avoid repetitive responses when the same policy exists in both Articles and FAQs
+        // 5. Deduplicate to avoid repetitive responses when the same policy exists in both Articles and FAQs
         $deduplicated = collect();
         $seenSignatures = [];
 
@@ -145,10 +170,7 @@ class KnowledgeRetrievalService
             $cat = mb_strtolower(trim($candidate['category']));
             $sig = "{$mod}|{$cat}";
 
-            // If an authoritative article already covers this exact module & category with higher/equal score,
-            // or if an FAQ on the same topic is already included, skip redundant duplicate
             if (isset($seenSignatures[$sig])) {
-                // If the query specifically matches a different question or title, allow distinct entries
                 $existing = $seenSignatures[$sig];
                 if ($this->isRedundantDuplicate($candidate['model'], $existing['model'])) {
                     continue;
@@ -166,6 +188,18 @@ class KnowledgeRetrievalService
         $hasRelevant = $deduplicated->isNotEmpty();
         $context = $hasRelevant ? $this->buildContextString($deduplicated) : '';
         $sources = $hasRelevant ? $this->formatSources($deduplicated) : [];
+
+        $retrievalDurationMs = round((microtime(true) - $retrievalStart) * 1000, 2);
+        if (app()->environment('local', 'testing') || config('app.debug')) {
+            Log::info('AI Timing: Knowledge Base Retrieval', [
+                'stage' => 'kb_retrieval',
+                'duration_ms' => $retrievalDurationMs,
+                'lexical_bypass' => $bypassEmbedding,
+                'max_lexical_score' => $maxLexicalScore,
+                'candidate_count' => $deduplicated->count(),
+                'has_relevant' => $hasRelevant,
+            ]);
+        }
 
         return [
             'articles' => $deduplicated,

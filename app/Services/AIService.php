@@ -21,8 +21,10 @@ class AIService
     protected string $model;
     protected string $baseUrl;
     protected int $timeout;
+    protected int $connectTimeout;
     protected int $retryTimes;
     protected int $retryDelay;
+    protected int $maxTokens;
 
     public function __construct(KnowledgeRetrievalService $retrievalService)
     {
@@ -31,9 +33,11 @@ class AIService
         $this->apiKey = !empty($rawKey) ? trim((string) $rawKey) : null;
         $this->model = (string) Config::get('services.ai.model', 'gemini-3.8-flash');
         $this->baseUrl = rtrim((string) Config::get('services.ai.base_url', 'https://generativelanguage.googleapis.com/v1beta/openai'), '/');
-        $this->timeout = (int) Config::get('services.ai.timeout', 60);
-        $this->retryTimes = (int) Config::get('services.ai.retry_times', 2);
-        $this->retryDelay = (int) Config::get('services.ai.retry_delay', (function_exists('app') && app()->runningUnitTests()) ? 10 : 1000);
+        $this->timeout = (int) Config::get('services.ai.timeout', 15);
+        $this->connectTimeout = (int) Config::get('services.ai.connect_timeout', 5);
+        $this->retryTimes = (int) Config::get('services.ai.retry_times', 1);
+        $this->retryDelay = (int) Config::get('services.ai.retry_delay', (function_exists('app') && app()->runningUnitTests()) ? 10 : 500);
+        $this->maxTokens = (int) Config::get('services.ai.max_tokens', 800);
     }
 
     /**
@@ -69,11 +73,27 @@ class AIService
     }
 
     /**
+     * Get the configured connection timeout in seconds.
+     */
+    public function getConnectTimeout(): int
+    {
+        return $this->connectTimeout;
+    }
+
+    /**
      * Get the configured retry times.
      */
     public function getRetryTimes(): int
     {
         return $this->retryTimes;
+    }
+
+    /**
+     * Get the maximum tokens limit per response.
+     */
+    public function getMaxTokens(): int
+    {
+        return $this->maxTokens;
     }
 
     /**
@@ -179,8 +199,10 @@ class AIService
         ];
 
         // 6. Call LLM API via Laravel HTTP Client with timeouts and error handling
+        $llmStart = microtime(true);
         try {
-            $response = Http::timeout($this->timeout)
+            $response = Http::connectTimeout($this->connectTimeout)
+                ->timeout($this->timeout)
                 ->retry(
                     times: $this->retryTimes,
                     sleepMilliseconds: $this->retryDelay,
@@ -201,7 +223,18 @@ class AIService
                     'model' => $this->model,
                     'messages' => $llmMessages,
                     'temperature' => 0.2,
+                    'max_tokens' => $this->maxTokens,
                 ]);
+
+            $llmDurationMs = round((microtime(true) - $llmStart) * 1000, 2);
+            if (app()->environment('local', 'testing') || config('app.debug')) {
+                Log::info('AI Timing: LLM Generation', [
+                    'stage' => 'llm_generation',
+                    'duration_ms' => $llmDurationMs,
+                    'model' => $this->model,
+                    'stream' => false,
+                ]);
+            }
 
             if ($response->successful()) {
                 $content = $response->json('choices.0.message.content');
@@ -294,6 +327,299 @@ class AIService
                 'is_policy_fallback' => $hasRelevant,
                 'error' => 'EXCEPTION',
                 'error_message' => $safeError,
+            ];
+        }
+    }
+
+    /**
+     * Process a user question using RAG and streamed LLM completion.
+     * Invokes $onToken callback as text deltas are received from the upstream stream.
+     *
+     * @param string $userQuestion
+     * @param iterable $conversationHistory
+     * @param callable(string): void|null $onToken
+     * @return array{success: bool, answer: string, sources: array, fallback: bool, is_policy_fallback?: bool, error?: string}
+     */
+    public function askStream(string $userQuestion, iterable $conversationHistory = [], ?callable $onToken = null): array
+    {
+        if (function_exists('set_time_limit') && (!function_exists('app') || !app()->runningUnitTests())) {
+            @set_time_limit(180);
+        }
+
+        $cleanQuestion = trim($userQuestion);
+
+        if (empty($cleanQuestion)) {
+            return [
+                'success' => false,
+                'answer' => 'Please provide a valid question.',
+                'sources' => [],
+                'fallback' => false,
+                'error' => 'EMPTY_QUESTION',
+            ];
+        }
+
+        // Format and bound conversation history
+        $formattedHistory = [];
+        $lastUserQuery = null;
+
+        foreach ($conversationHistory as $msg) {
+            $role = is_array($msg) ? ($msg['role'] ?? 'user') : ($msg->role ?? 'user');
+            $content = is_array($msg) ? ($msg['content'] ?? '') : ($msg->content ?? '');
+
+            $trimmedContent = trim((string) $content);
+            if (!empty($trimmedContent)) {
+                if ($role === 'user') {
+                    $lastUserQuery = $trimmedContent;
+                }
+                $formattedHistory[] = [
+                    'role' => $role === 'assistant' ? 'assistant' : 'user',
+                    'content' => \Illuminate\Support\Str::limit($trimmedContent, 1000),
+                ];
+            }
+        }
+
+        if (count($formattedHistory) > 6) {
+            $formattedHistory = array_slice($formattedHistory, -6);
+        }
+
+        // 1. Retrieve & rank knowledge articles relevant to question
+        $retrieval = $this->retrievalService->retrieve($cleanQuestion);
+
+        // If direct follow-up has no matches, but prior conversation has context, try conversational retrieval
+        if (!$retrieval['has_relevant_results'] && !empty($lastUserQuery)) {
+            $combinedQuery = trim($lastUserQuery . ' ' . $cleanQuestion);
+            if (mb_strtolower($combinedQuery) !== mb_strtolower($cleanQuestion)) {
+                $contextualRetrieval = $this->retrievalService->retrieve($combinedQuery);
+                if ($contextualRetrieval['has_relevant_results']) {
+                    $retrieval = $contextualRetrieval;
+                }
+            }
+        }
+
+        // 2. Strict Rule: If no relevant articles are found, do not let LLM hallucinate
+        if (!$retrieval['has_relevant_results']) {
+            if ($onToken) {
+                $onToken(self::FALLBACK_MESSAGE);
+            }
+            return [
+                'success' => true,
+                'answer' => self::FALLBACK_MESSAGE,
+                'sources' => [],
+                'fallback' => true,
+            ];
+        }
+
+        // 3. Check API key configuration
+        if (!$this->isConfigured()) {
+            Log::warning('AI Service called but no AI API key is configured');
+            $msg = 'The AI assistant is temporarily unavailable because the AI service is not configured. Please contact support.';
+            if ($onToken) {
+                $onToken($msg);
+            }
+            return [
+                'success' => false,
+                'answer' => $msg,
+                'sources' => $retrieval['sources'],
+                'fallback' => false,
+                'error' => 'API_KEY_MISSING',
+            ];
+        }
+
+        // 4. Construct System Prompt with Knowledge Base Context
+        $systemPrompt = $this->buildSystemPrompt($retrieval['context']);
+
+        $llmMessages = [
+            [
+                'role' => 'system',
+                'content' => $systemPrompt,
+            ],
+        ];
+
+        foreach ($formattedHistory as $turn) {
+            $llmMessages[] = $turn;
+        }
+
+        $llmMessages[] = [
+            'role' => 'user',
+            'content' => $cleanQuestion,
+        ];
+
+        $llmStart = microtime(true);
+        $ttftMs = null;
+
+        try {
+            $response = Http::connectTimeout($this->connectTimeout)
+                ->timeout($this->timeout)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $this->apiKey,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'text/event-stream, application/json',
+                ])
+                ->withOptions(['stream' => true])
+                ->post($this->baseUrl . '/chat/completions', [
+                    'model' => $this->model,
+                    'messages' => $llmMessages,
+                    'temperature' => 0.2,
+                    'max_tokens' => $this->maxTokens,
+                    'stream' => true,
+                ]);
+
+            if ($response->successful()) {
+                $fullAnswer = '';
+                $body = $response->toPsrResponse()->getBody();
+
+                // If regular JSON (e.g. non-stream response or in mocked test)
+                $contentType = $response->header('Content-Type') ?? '';
+                if (str_contains($contentType, 'application/json') || !$body->isReadable()) {
+                    $jsonContent = $response->json('choices.0.message.content');
+                    if (!empty($jsonContent)) {
+                        $fullAnswer = trim((string) $jsonContent);
+                        $ttftMs = round((microtime(true) - $llmStart) * 1000, 2);
+                        if ($onToken) {
+                            $onToken($fullAnswer);
+                        }
+                        $totalDurationMs = round((microtime(true) - $llmStart) * 1000, 2);
+                        if (app()->environment('local', 'testing') || config('app.debug')) {
+                            Log::info('AI Timing: LLM Stream Generation', [
+                                'stage' => 'llm_generation',
+                                'ttft_ms' => $ttftMs,
+                                'total_duration_ms' => $totalDurationMs,
+                                'model' => $this->model,
+                                'stream' => true,
+                            ]);
+                        }
+                        return [
+                            'success' => true,
+                            'answer' => $fullAnswer,
+                            'sources' => $retrieval['sources'],
+                            'fallback' => false,
+                        ];
+                    }
+                }
+
+                // Read streamed chunks
+                while (!$body->eof()) {
+                    $line = \GuzzleHttp\Psr7\Utils::readLine($body);
+                    $trimmed = trim($line);
+                    if (str_starts_with($trimmed, 'data: ')) {
+                        $payload = substr($trimmed, 6);
+                        if ($payload === '[DONE]') {
+                            break;
+                        }
+                        $chunk = json_decode($payload, true);
+                        if (is_array($chunk)) {
+                            $delta = $chunk['choices'][0]['delta']['content'] ?? '';
+                            if ($delta !== '') {
+                                if ($ttftMs === null) {
+                                    $ttftMs = round((microtime(true) - $llmStart) * 1000, 2);
+                                }
+                                $fullAnswer .= $delta;
+                                if ($onToken) {
+                                    $onToken($delta);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                $totalDurationMs = round((microtime(true) - $llmStart) * 1000, 2);
+                if (app()->environment('local', 'testing') || config('app.debug')) {
+                    Log::info('AI Timing: LLM Stream Generation', [
+                        'stage' => 'llm_generation',
+                        'ttft_ms' => $ttftMs,
+                        'total_duration_ms' => $totalDurationMs,
+                        'model' => $this->model,
+                        'stream' => true,
+                    ]);
+                }
+
+                if (!empty(trim($fullAnswer))) {
+                    return [
+                        'success' => true,
+                        'answer' => trim($fullAnswer),
+                        'sources' => $retrieval['sources'],
+                        'fallback' => false,
+                    ];
+                }
+            }
+
+            // Upstream returned non-200 status or produced no tokens
+            $status = $response->status();
+            $errorMessage = 'HTTP ' . $status . ' error';
+            try {
+                $json = $response->json();
+                if (is_array($json)) {
+                    $rawMsg = $json['error']['message'] ?? $json[0]['error']['message'] ?? $json['message'] ?? null;
+                    if (!empty($rawMsg)) {
+                        $errorMessage = (string) $rawMsg;
+                    }
+                }
+            } catch (\Throwable) {}
+
+            $errorType = match (true) {
+                in_array($status, [401, 403], true) => 'AUTH_ERROR',
+                $status === 404 => 'INVALID_MODEL',
+                in_array($status, [402, 429], true) || str_contains(strtolower($errorMessage), 'quota') || str_contains(strtolower($errorMessage), 'billing') => 'RATE_LIMIT_OR_QUOTA',
+                in_array($status, [400, 422], true) => 'MALFORMED_REQUEST',
+                in_array($status, [500, 502, 503, 504], true) => 'SERVICE_UNAVAILABLE',
+                default => 'API_ERROR',
+            };
+
+            $totalDurationMs = round((microtime(true) - $llmStart) * 1000, 2);
+            if (app()->environment('local', 'testing') || config('app.debug')) {
+                Log::info('AI Timing: LLM Stream Generation', [
+                    'stage' => 'llm_generation',
+                    'ttft_ms' => $ttftMs,
+                    'total_duration_ms' => $totalDurationMs,
+                    'model' => $this->model,
+                    'stream' => true,
+                    'error' => $errorType,
+                ]);
+            }
+
+            // Immediately build policy fallback from already retrieved articles — NO duplicate retrieval, NO duplicate LLM call
+            $fallbackAnswer = $this->buildPolicyFallbackAnswer($errorType, $retrieval['articles']);
+            if ($onToken) {
+                $onToken($fallbackAnswer);
+            }
+
+            return [
+                'success' => false,
+                'answer' => $fallbackAnswer,
+                'sources' => $retrieval['sources'],
+                'fallback' => true,
+                'is_policy_fallback' => true,
+                'error' => $errorType,
+            ];
+        } catch (\Throwable $e) {
+            $isTimeout = ($e instanceof ConnectionException) || str_contains(strtolower($e->getMessage()), 'timed out');
+            $errorType = $isTimeout ? 'TIMEOUT' : 'CONNECTION_ERROR';
+
+            $totalDurationMs = round((microtime(true) - $llmStart) * 1000, 2);
+            if (app()->environment('local', 'testing') || config('app.debug')) {
+                Log::info('AI Timing: LLM Stream Generation', [
+                    'stage' => 'llm_generation',
+                    'ttft_ms' => $ttftMs,
+                    'total_duration_ms' => $totalDurationMs,
+                    'model' => $this->model,
+                    'stream' => true,
+                    'error' => $errorType,
+                ]);
+            }
+
+            // Immediately build policy fallback from already retrieved articles — NO duplicate retrieval, NO duplicate LLM call
+            $fallbackAnswer = $this->buildPolicyFallbackAnswer($errorType, $retrieval['articles']);
+            if ($onToken) {
+                $onToken($fallbackAnswer);
+            }
+
+            return [
+                'success' => false,
+                'answer' => $fallbackAnswer,
+                'sources' => $retrieval['sources'],
+                'fallback' => true,
+                'is_policy_fallback' => true,
+                'error' => $errorType,
             ];
         }
     }

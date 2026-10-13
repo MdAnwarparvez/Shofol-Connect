@@ -7,8 +7,10 @@ use App\Services\AIService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ChatController extends Controller
 {
@@ -67,8 +69,10 @@ class ChatController extends Controller
     /**
      * Send a question to the AI Assistant and receive a RAG-grounded response.
      */
-    public function send(Request $request, AIService $aiService): JsonResponse|RedirectResponse
+    public function send(Request $request, AIService $aiService): JsonResponse|RedirectResponse|StreamedResponse
     {
+        $requestStart = microtime(true);
+
         $validated = $request->validate([
             'message' => ['required', 'string', 'max:1000'],
             'conversation_id' => ['nullable', 'integer'],
@@ -106,7 +110,94 @@ class ChatController extends Controller
             'content' => $validated['message'],
         ]);
 
-        // 3. Query AIService with RAG retrieval and multi-turn conversation context
+        // 3. Check if client requested a streamed response
+        $isStream = $request->header('Accept') === 'text/event-stream' || $request->boolean('stream');
+
+        if ($isStream) {
+            $priorHistory = $conversation->messages()
+                ->where('id', '!=', $userMessage->id)
+                ->latest('id')
+                ->limit(6)
+                ->get()
+                ->reverse()
+                ->values();
+
+            return response()->stream(function () use ($aiService, $validated, $conversation, $userMessage, $priorHistory, $requestStart) {
+                if (ob_get_level() > 0 && (!function_exists('app') || !app()->runningUnitTests())) {
+                    @ob_flush();
+                }
+
+                // Push initial message metadata
+                echo "event: user_message\n";
+                echo "data: " . json_encode([
+                    'id' => $userMessage->id,
+                    'role' => $userMessage->role,
+                    'content' => $userMessage->content,
+                    'created_at' => $userMessage->created_at->format('h:i A'),
+                    'conversation_id' => $conversation->id,
+                ]) . "\n\n";
+                flush();
+
+                $aiResult = $aiService->askStream($validated['message'], $priorHistory, function (string $token) {
+                    echo "event: token\n";
+                    echo "data: " . json_encode(['token' => $token]) . "\n\n";
+                    if (ob_get_level() > 0 && (!function_exists('app') || !app()->runningUnitTests())) {
+                        @ob_flush();
+                    }
+                    flush();
+                });
+
+                // Store AI assistant response
+                $assistantMessage = $conversation->messages()->create([
+                    'role' => 'assistant',
+                    'content' => $aiResult['answer'],
+                    'sources' => $aiResult['sources'] ?? [],
+                ]);
+
+                $conversation->touch();
+
+                echo "event: done\n";
+                echo "data: " . json_encode([
+                    'success' => $aiResult['success'],
+                    'assistant_message' => [
+                        'id' => $assistantMessage->id,
+                        'role' => $assistantMessage->role,
+                        'content' => $assistantMessage->content,
+                        'content_html' => Str::markdown($assistantMessage->content, [
+                            'html_input' => 'strip',
+                            'allow_unsafe_links' => false,
+                        ]),
+                        'sources' => $assistantMessage->sources ?? [],
+                        'fallback' => $aiResult['fallback'] ?? false,
+                        'is_policy_fallback' => $aiResult['is_policy_fallback'] ?? false,
+                        'error' => $aiResult['error'] ?? null,
+                        'created_at' => $assistantMessage->created_at->format('h:i A'),
+                    ],
+                    'conversation_id' => $conversation->id,
+                    'conversation_title' => $conversation->title,
+                ]) . "\n\n";
+                if (ob_get_level() > 0 && (!function_exists('app') || !app()->runningUnitTests())) {
+                    @ob_flush();
+                }
+                flush();
+
+                $totalDurationMs = round((microtime(true) - $requestStart) * 1000, 2);
+                if (app()->environment('local', 'testing') || config('app.debug')) {
+                    Log::info('AI Timing: Total Backend Request', [
+                        'stage' => 'total_backend_request',
+                        'duration_ms' => $totalDurationMs,
+                        'stream' => true,
+                    ]);
+                }
+            }, 200, [
+                'Content-Type' => 'text/event-stream',
+                'Cache-Control' => 'no-cache, no-transform',
+                'Connection' => 'keep-alive',
+                'X-Accel-Buffering' => 'no',
+            ]);
+        }
+
+        // 4. Standard synchronous processing for regular JSON / non-stream requests
         $priorHistory = $conversation->messages()
             ->where('id', '!=', $userMessage->id)
             ->latest('id')
@@ -117,7 +208,7 @@ class ChatController extends Controller
 
         $aiResult = $aiService->ask($validated['message'], $priorHistory);
 
-        // 4. Store AI assistant response
+        // Store AI assistant response
         $assistantMessage = $conversation->messages()->create([
             'role' => 'assistant',
             'content' => $aiResult['answer'],
@@ -126,6 +217,15 @@ class ChatController extends Controller
 
         // Touch timestamp on conversation to update last activity
         $conversation->touch();
+
+        $totalDurationMs = round((microtime(true) - $requestStart) * 1000, 2);
+        if (app()->environment('local', 'testing') || config('app.debug')) {
+            Log::info('AI Timing: Total Backend Request', [
+                'stage' => 'total_backend_request',
+                'duration_ms' => $totalDurationMs,
+                'stream' => false,
+            ]);
+        }
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Faq;
 use App\Models\KnowledgeArticle;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -15,6 +16,7 @@ class EmbeddingService
     protected string $embeddingModel;
     protected ?int $dimensions;
     protected int $timeout;
+    protected int $connectTimeout;
 
     public function __construct()
     {
@@ -23,7 +25,8 @@ class EmbeddingService
         $this->baseUrl = rtrim((string) Config::get('services.ai.base_url', 'https://generativelanguage.googleapis.com/v1beta/openai'), '/');
         $this->embeddingModel = (string) Config::get('services.ai.embedding_model', 'gemini-embedding-2');
         $this->dimensions = Config::get('services.ai.embedding_dimensions') ? (int) Config::get('services.ai.embedding_dimensions') : null;
-        $this->timeout = 15;
+        $this->timeout = (int) Config::get('services.ai.embedding_timeout', 10);
+        $this->connectTimeout = (int) Config::get('services.ai.embedding_connect_timeout', 3);
     }
 
     /**
@@ -57,7 +60,7 @@ class EmbeddingService
      * @param string $text
      * @return list<float>|null
      */
-    public function generateEmbedding(string $text): ?array
+    public function generateEmbedding(string $text, bool $useCache = true): ?array
     {
         $cleanText = trim($text);
 
@@ -69,6 +72,24 @@ class EmbeddingService
         if (mb_strlen($cleanText) > 8000) {
             $cleanText = mb_substr($cleanText, 0, 8000);
         }
+
+        $cacheKey = 'emb_query_' . md5($this->embeddingModel . ':' . ($this->dimensions ?? 'def') . ':' . mb_strtolower($cleanText));
+        if ($useCache) {
+            $cached = Cache::get($cacheKey);
+            if (is_array($cached) && !empty($cached)) {
+                if (app()->environment('local', 'testing') || config('app.debug')) {
+                    Log::info('AI Timing: Embedding Generation', [
+                        'stage' => 'embedding',
+                        'cache_hit' => true,
+                        'duration_ms' => 0.0,
+                        'model' => $this->embeddingModel,
+                    ]);
+                }
+                return $cached;
+            }
+        }
+
+        $embStart = microtime(true);
 
         try {
             $payload = [
@@ -85,15 +106,30 @@ class EmbeddingService
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
                 ])
+                ->connectTimeout($this->connectTimeout)
                 ->timeout($this->timeout)
                 ->post("{$this->baseUrl}/embeddings", $payload);
+
+            $embDurationMs = round((microtime(true) - $embStart) * 1000, 2);
+            if (app()->environment('local', 'testing') || config('app.debug')) {
+                Log::info('AI Timing: Embedding Generation', [
+                    'stage' => 'embedding',
+                    'cache_hit' => false,
+                    'duration_ms' => $embDurationMs,
+                    'model' => $this->embeddingModel,
+                ]);
+            }
 
             if ($response->successful()) {
                 $data = $response->json();
                 $vector = $data['data'][0]['embedding'] ?? null;
 
                 if (is_array($vector) && !empty($vector)) {
-                    return array_map('floatval', $vector);
+                    $result = array_map('floatval', $vector);
+                    if ($useCache) {
+                        Cache::put($cacheKey, $result, 3600);
+                    }
+                    return $result;
                 }
             } else {
                 $status = $response->status();
@@ -102,6 +138,15 @@ class EmbeddingService
                 ]);
             }
         } catch (\Throwable $e) {
+            $embDurationMs = round((microtime(true) - $embStart) * 1000, 2);
+            if (app()->environment('local', 'testing') || config('app.debug')) {
+                Log::info('AI Timing: Embedding Generation', [
+                    'stage' => 'embedding',
+                    'cache_hit' => false,
+                    'duration_ms' => $embDurationMs,
+                    'model' => $this->embeddingModel,
+                ]);
+            }
             Log::warning('Embedding generation encountered exception: ' . $this->sanitizeMessage($e->getMessage()));
         }
 
