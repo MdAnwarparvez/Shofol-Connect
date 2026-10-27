@@ -102,6 +102,8 @@ AI_RETRY_TIMES=2
 AI_RETRY_DELAY=1000
 ```
 
+Use `OPENAI_API_KEY` with `AI_PROVIDER=openai` and `https://api.openai.com/v1`. `AI_API_KEY`, when set, overrides the provider-specific key. Changing `.env` values has no effect while Laravel's configuration cache is active; refresh it with `php artisan config:clear`, then rebuild it for production with `php artisan config:cache`.
+
 > **Note**: Do not commit your `.env` file to version control. The `.gitignore` file is pre-configured to keep your credentials safe.
 
 ### Step 3: Run Database Migrations & Seeders

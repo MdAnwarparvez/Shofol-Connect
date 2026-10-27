@@ -72,7 +72,7 @@
             @endif
 
             <!-- Transcript Body -->
-            <div class="card-body p-4 p-md-5" style="background-color: #f8fafc;">
+            <div class="card-body p-4 p-md-5 chat-transcript-body">
                 <div class="d-flex flex-column gap-4">
                     @forelse($conversation->messages as $msg)
                         <div class="d-flex {{ $msg->role === 'user' ? 'justify-content-end' : 'justify-content-start' }}">
@@ -90,7 +90,7 @@
                                     <span class="text-muted" style="font-size: 0.75rem;">{{ $msg->created_at->format('h:i A') }}</span>
                                 </div>
 
-                                <div class="p-3 rounded-3 shadow-xs {{ $msg->role === 'user' ? 'bg-primary text-white' : 'bg-white text-dark border' }}">
+                                <div class="p-3 rounded-3 shadow-xs {{ $msg->role === 'user' ? 'bg-primary text-white' : 'card-assistant-bubble' }}">
                                     @if($msg->role === 'user')
                                         <div style="white-space: pre-wrap; line-height: 1.6;">{{ $msg->content }}</div>
                                     @else

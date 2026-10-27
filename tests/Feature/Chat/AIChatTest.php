@@ -401,8 +401,54 @@ test('successfully completes request with gemini-3.8-flash via OpenAI-compatible
         return $request->url() === 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions' &&
                str_contains($body, 'gemini-3.8-flash') &&
                str_contains($body, 'Payroll cutoff is the 25th day') &&
-               $request->hasHeader('Authorization');
+               $request->hasHeader('Authorization', 'Bearer test-valid-gemini-key') &&
+               $request->hasHeader('Content-Type', 'application/json');
     });
+});
+
+test('classifies forbidden credentials and provider server errors without returning upstream details to chat users', function () {
+    KnowledgeArticle::factory()->create([
+        'module' => 'Payroll',
+        'title' => 'Monthly Payroll Cycle',
+        'content' => 'Salary is paid on the final working day of each month.',
+        'status' => 'active',
+    ]);
+
+    Config::set('services.ai.api_key', 'test-provider-key');
+    Config::set('services.ai.retry_times', 1);
+    Http::fake([
+        '*/chat/completions' => Http::sequence()
+            ->push(['error' => ['message' => 'Internal provider diagnostic details']], 403)
+            ->push(['error' => ['message' => 'Internal provider diagnostic details']], 500),
+    ]);
+
+    foreach (['AUTH_ERROR', 'SERVICE_UNAVAILABLE'] as $expectedError) {
+        $result = app(AIService::class)->ask('When is monthly salary paid?');
+
+        expect($result['error'])->toBe($expectedError)
+            ->and($result['answer'])->not->toContain('Internal provider diagnostic details')
+            ->and($result['answer'])->toContain('temporary service issue');
+    }
+});
+
+test('rejects an invalid provider base URL and preserves retrieved policy', function () {
+    Config::set('services.ai.api_key', 'test-provider-key');
+    Config::set('services.ai.base_url', 'http://invalid host');
+
+    KnowledgeArticle::factory()->create([
+        'module' => 'Payroll',
+        'title' => 'Monthly Payroll Cycle',
+        'content' => 'Salary is paid on the final working day of each month.',
+        'status' => 'active',
+    ]);
+
+    $result = app(AIService::class)->ask('When is monthly salary paid?');
+
+    expect($result['success'])->toBeFalse()
+        ->and($result['error'])->toBe('INVALID_BASE_URL')
+        ->and($result['answer'])->toContain('Salary is paid on the final working day');
+
+    Http::assertNothingSent();
 });
 
 test('handles Gemini rate limit and quota exhaustion 429 gracefully with RATE_LIMIT_OR_QUOTA classification', function () {

@@ -13,18 +13,18 @@
         border-radius: 1rem;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
         overflow: hidden;
-        background: #ffffff;
+        background: var(--theme-card-bg, #ffffff);
     }
     .chat-header {
-        background: #ffffff;
-        border-bottom: 1px solid #edf2f7;
+        background: var(--theme-card-bg, #ffffff);
+        border-bottom: 1px solid var(--theme-card-border, #edf2f7);
         padding: 1rem 1.5rem;
     }
     .chat-messages {
         height: 520px;
         overflow-y: auto;
         padding: 1.5rem;
-        background: #f8fafc;
+        background: var(--theme-chat-messages-bg, #f8fafc);
         display: flex;
         flex-direction: column;
         gap: 1rem;
@@ -55,9 +55,17 @@
         background: #e0f2fe;
         color: #0284c7;
     }
+    [data-bs-theme="dark"] .avatar-assistant {
+        background: rgba(2, 132, 199, 0.25);
+        color: #38bdf8;
+    }
     .avatar-user {
         background: #ede9fe;
         color: #7c3aed;
+    }
+    [data-bs-theme="dark"] .avatar-user {
+        background: rgba(124, 58, 237, 0.25);
+        color: #c084fc;
     }
     .message-bubble {
         padding: 0.85rem 1.15rem;
@@ -67,24 +75,24 @@
         word-break: break-word;
     }
     .message-bubble.user {
-        background: #0d6efd;
+        background: var(--theme-chat-user-bg, #0d6efd);
         color: #ffffff;
         border-bottom-right-radius: 0.25rem;
     }
     .message-bubble.assistant {
-        background: #ffffff;
-        color: #1e293b;
-        border: 1px solid #e2e8f0;
+        background: var(--theme-chat-assistant-bg, #ffffff);
+        color: var(--theme-chat-assistant-color, #1e293b);
+        border: 1px solid var(--theme-chat-assistant-border, #e2e8f0);
         border-bottom-left-radius: 0.25rem;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
     }
     .sources-box {
         margin-top: 0.5rem;
         padding: 0.5rem 0.75rem;
-        background: #f1f5f9;
+        background: var(--theme-sources-bg, #f1f5f9);
         border-radius: 0.5rem;
         font-size: 0.8rem;
-        color: #475569;
+        color: var(--theme-sources-color, #475569);
     }
     .prompt-chip {
         cursor: pointer;
@@ -95,14 +103,28 @@
         background: #e2e8f0 !important;
         transform: translateY(-1px);
     }
+    [data-bs-theme="dark"] .prompt-chip {
+        background: #1f2937 !important;
+        color: #e2e8f0 !important;
+        border-color: #374151 !important;
+    }
+    [data-bs-theme="dark"] .prompt-chip:hover {
+        background: #374151 !important;
+        color: #ffffff !important;
+    }
     .typing-indicator {
         display: none;
         align-self: flex-start;
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
+        background: var(--theme-chat-assistant-bg, #ffffff);
+        border: 1px solid var(--theme-chat-assistant-border, #e2e8f0);
+        color: var(--theme-chat-assistant-color, #1e293b);
         padding: 0.75rem 1rem;
         border-radius: 1rem;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    }
+    .chat-footer {
+        background: var(--theme-card-bg, #ffffff);
+        border-top: 1px solid var(--theme-card-border, #edf2f7);
     }
     .markdown-content {
         line-height: 1.6;
@@ -125,21 +147,22 @@
         font-weight: 600;
         margin-top: 0.5rem;
         margin-bottom: 0.35rem;
-        color: #0f172a;
+        color: var(--theme-text-heading, #0f172a);
     }
     .markdown-content pre {
-        background: #f1f5f9;
+        background: var(--theme-code-bg, #f1f5f9);
         padding: 0.5rem 0.75rem;
         border-radius: 0.375rem;
         overflow-x: auto;
         font-size: 0.85rem;
         margin-top: 0.35rem;
         margin-bottom: 0.5rem;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--theme-card-border, #e2e8f0);
+        color: var(--theme-code-color, #0f172a);
     }
     .markdown-content code {
-        background: #f1f5f9;
-        color: #0f172a;
+        background: var(--theme-code-bg, #f1f5f9);
+        color: var(--theme-code-color, #0f172a);
         padding: 0.15rem 0.3rem;
         border-radius: 0.25rem;
         font-size: 0.875em;
@@ -151,7 +174,7 @@
         border: 0;
     }
     .markdown-content a {
-        color: #0d6efd;
+        color: var(--brand-primary, #0d6efd);
         text-decoration: underline;
     }
     .markdown-content a:hover {
@@ -161,7 +184,10 @@
         border-left: 3px solid #cbd5e1;
         padding-left: 0.75rem;
         margin: 0.5rem 0;
-        color: #64748b;
+        color: var(--theme-text-muted, #64748b);
+    }
+    [data-bs-theme="dark"] .markdown-content blockquote {
+        border-left-color: #475569;
     }
 </style>
 @endsection
@@ -287,7 +313,7 @@
                                 <div class="fw-semibold small mb-1"><i class="bi bi-journal-check text-primary me-1"></i>Verified Sources:</div>
                                 <div class="d-flex flex-wrap gap-1">
                                     @foreach($msg->sources as $src)
-                                        <span class="badge bg-white text-secondary border">
+                                        <span class="badge bg-white text-secondary border me-1 mb-1 py-1 px-2">
                                             [{{ $src['module'] }}] {{ $src['title'] }}
                                         </span>
                                     @endforeach
@@ -549,7 +575,7 @@
 
         let sourcesHtml = '';
         if (sources && sources.length > 0) {
-            const badges = sources.map(s => `<span class="badge bg-white text-secondary border">[${escapeHtml(s.module)}] ${escapeHtml(s.title)}</span>`).join(' ');
+            const badges = sources.map(s => `<span class="badge bg-white text-secondary border me-1 mb-1 py-1 px-2">[${escapeHtml(s.module)}] ${escapeHtml(s.title)}</span>`).join(' ');
             sourcesHtml = `
                 <div class="sources-box">
                     <div class="fw-semibold small mb-1"><i class="bi bi-journal-check text-primary me-1"></i>Verified Sources:</div>

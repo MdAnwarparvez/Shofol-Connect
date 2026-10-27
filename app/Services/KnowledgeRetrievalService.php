@@ -161,11 +161,19 @@ class KnowledgeRetrievalService
         // 4. Sort candidates by relevance score descending
         $sorted = $scoredCandidates->sortByDesc('score');
 
+        // Dynamic relevance filter: prune distant, low-scoring candidates when a strong match exists
+        $topScore = $sorted->first()['score'] ?? 0;
+        $effectiveThreshold = max($this->minimumScoreThreshold, (int) round($topScore * 0.25));
+
         // 5. Deduplicate to avoid repetitive responses when the same policy exists in both Articles and FAQs
         $deduplicated = collect();
         $seenSignatures = [];
 
         foreach ($sorted as $candidate) {
+            if ($candidate['score'] < $effectiveThreshold) {
+                continue;
+            }
+
             $mod = mb_strtolower(trim($candidate['module']));
             $cat = mb_strtolower(trim($candidate['category']));
             $sig = "{$mod}|{$cat}";
@@ -261,24 +269,31 @@ class KnowledgeRetrievalService
             }
         }
 
-        // 2. Token / keyword matches
+        $moduleTokens = $this->extractTokens($module);
+        $categoryTokens = $this->extractTokens($category);
+        $titleTokens = $this->extractTokens($title);
+        $questionTokens = !empty($question) ? $this->extractTokens($question) : [];
+        $keywordTokens = !empty($keywords) ? $this->extractTokens($keywords) : [];
+        $contentTokens = $this->extractTokens($content);
+
+        // 2. Token / keyword matches (whole-word token matching to prevent substring contamination)
         foreach ($tokens as $token) {
-            if (str_contains($module, $token)) {
+            if (in_array($token, $moduleTokens, true)) {
                 $score += 5;
             }
-            if (str_contains($category, $token)) {
+            if (in_array($token, $categoryTokens, true)) {
                 $score += 4;
             }
-            if (str_contains($title, $token)) {
+            if (in_array($token, $titleTokens, true)) {
                 $score += 6;
             }
-            if (!empty($question) && str_contains($question, $token)) {
+            if (in_array($token, $questionTokens, true)) {
                 $score += 6;
             }
-            if (!empty($keywords) && str_contains($keywords, $token)) {
+            if (in_array($token, $keywordTokens, true)) {
                 $score += 5;
             }
-            if (str_contains($content, $token)) {
+            if (in_array($token, $contentTokens, true)) {
                 $score += 1;
             }
         }
@@ -296,7 +311,8 @@ class KnowledgeRetrievalService
         $question = mb_strtolower($faq->question);
         $answer = mb_strtolower($faq->answer);
         $keywords = mb_strtolower($faq->keywords ?? '');
-        $module = mb_strtolower($faq->shofolModule?->name ?? $faq->shofolModule?->code ?? '');
+        $modCode = $faq->shofolModule?->code ?? '';
+        $modName = $faq->shofolModule?->name ?? '';
         $category = mb_strtolower($faq->knowledgeCategory?->name ?? '');
 
         // 1. Direct phrase matching
@@ -312,21 +328,30 @@ class KnowledgeRetrievalService
             }
         }
 
-        // 2. Token / keyword matches
+        $moduleTokens = array_unique(array_merge(
+            $this->extractTokens($modCode),
+            $this->extractTokens($modName)
+        ));
+        $categoryTokens = $this->extractTokens($category);
+        $questionTokens = $this->extractTokens($question);
+        $keywordTokens = !empty($keywords) ? $this->extractTokens($keywords) : [];
+        $answerTokens = $this->extractTokens($answer);
+
+        // 2. Token / keyword matches (whole-word token matching to prevent substring contamination)
         foreach ($tokens as $token) {
-            if (!empty($module) && str_contains($module, $token)) {
+            if (in_array($token, $moduleTokens, true)) {
                 $score += 5;
             }
-            if (!empty($category) && str_contains($category, $token)) {
+            if (in_array($token, $categoryTokens, true)) {
                 $score += 4;
             }
-            if (str_contains($question, $token)) {
+            if (in_array($token, $questionTokens, true)) {
                 $score += 7;
             }
-            if (!empty($keywords) && str_contains($keywords, $token)) {
+            if (in_array($token, $keywordTokens, true)) {
                 $score += 5;
             }
-            if (str_contains($answer, $token)) {
+            if (in_array($token, $answerTokens, true)) {
                 $score += 1;
             }
         }
@@ -412,7 +437,7 @@ class KnowledgeRetrievalService
             return [
                 'id' => $item->id,
                 'title' => $item->question,
-                'module' => $item->shofolModule?->name ?? $item->shofolModule?->code ?? 'General',
+                'module' => $item->shofolModule?->code ?? $item->shofolModule?->name ?? 'General',
                 'category' => $item->knowledgeCategory?->name ?? 'General',
                 'type' => 'faq',
             ];
