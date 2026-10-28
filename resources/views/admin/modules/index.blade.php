@@ -198,12 +198,29 @@
                                         </a>
 
                                         <!-- Safe Delete Form with Reference Warning -->
-                                        @if($module->knowledge_articles_count > 0)
-                                            <button type="button" class="btn btn-sm btn-outline-danger opacity-50" title="Cannot delete: referenced by {{ $module->knowledge_articles_count }} knowledge articles" onclick="alert('Cannot delete module \'{{ $module->name }}\' ({{ $module->code }}) because {{ $module->knowledge_articles_count }} knowledge articles currently reference it. Please reassign or delete the articles first.');">
+                                        @php
+                                            $refItems = [];
+                                            if (($module->knowledge_articles_count ?? 0) > 0) {
+                                                $refItems[] = $module->knowledge_articles_count . ' ' . \Illuminate\Support\Str::plural('knowledge article', $module->knowledge_articles_count);
+                                            }
+                                            if (($module->categories_count ?? 0) > 0) {
+                                                $refItems[] = $module->categories_count . ' ' . \Illuminate\Support\Str::plural('knowledge category', $module->categories_count);
+                                            }
+                                            if (($module->faqs_count ?? 0) > 0) {
+                                                $refItems[] = $module->faqs_count . ' ' . \Illuminate\Support\Str::plural('FAQ', $module->faqs_count);
+                                            }
+                                            $hasReferences = count($refItems) > 0;
+                                            $refText = count($refItems) > 1
+                                                ? implode(', ', array_slice($refItems, 0, -1)) . ' and ' . end($refItems)
+                                                : ($refItems[0] ?? '');
+                                        @endphp
+
+                                        @if($hasReferences)
+                                            <button type="button" class="btn btn-sm btn-outline-danger opacity-50" title="Cannot delete: referenced by {{ $refText }}" onclick="alert('Cannot delete module \'{{ addslashes($module->name) }}\' ({{ $module->code }}) because {{ addslashes($refText) }} currently reference it. Please reassign or delete the referenced items first.');">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         @else
-                                            <form method="POST" action="{{ route('admin.modules.destroy', $module) }}" class="d-inline" onsubmit="return confirm('Are you sure you want to delete module \'{{ $module->name }}\' ({{ $module->code }})?');">
+                                            <form method="POST" action="{{ route('admin.modules.destroy', $module) }}" class="d-inline" onsubmit="return confirm('Are you sure you want to delete module \'{{ addslashes($module->name) }}\' ({{ $module->code }})?');">
                                                 @csrf
                                                 @method('DELETE')
                                                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Module">

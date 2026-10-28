@@ -2,6 +2,34 @@
 
 @section('title', 'Support Tickets Management — Admin Panel')
 
+@section('styles')
+<style>
+    .ticket-filter-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        cursor: pointer;
+    }
+    .ticket-filter-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08) !important;
+    }
+    .ticket-filter-card.is-active {
+        box-shadow: 0 0 0 2px var(--brand-primary), 0 0.5rem 1rem rgba(13, 110, 253, 0.15) !important;
+    }
+    [data-bs-theme="dark"] .ticket-filter-card.is-active {
+        box-shadow: 0 0 0 2px var(--brand-primary), 0 0.5rem 1rem rgba(59, 130, 246, 0.25) !important;
+    }
+    [data-bs-theme="dark"] .btn-outline-secondary {
+        color: #cbd5e1;
+        border-color: #475569;
+    }
+    [data-bs-theme="dark"] .btn-outline-secondary:hover {
+        background-color: #334155;
+        border-color: #64748b;
+        color: #ffffff;
+    }
+</style>
+@endsection
+
 @section('content')
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
@@ -20,36 +48,64 @@
     </div>
 </div>
 
+@php
+    $selectedStatus = request('status');
+    $isAllTickets = empty($selectedStatus);
+    $isOpen = $selectedStatus === 'Open';
+    $isInProgress = $selectedStatus === 'In Progress';
+    $isResolved = $selectedStatus === 'Resolved';
+@endphp
+
 <!-- Admin Ticket Metrics Cards -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
-        <div class="card shadow-sm border-0 border-start border-4 border-primary h-100">
+        <a href="{{ route('admin.tickets.index') }}" class="card text-decoration-none text-body shadow-sm border-0 border-start border-4 border-primary h-100 ticket-filter-card position-relative {{ $isAllTickets ? 'is-active' : '' }}" title="Show All Tickets">
             <div class="card-body py-3">
-                <div class="text-muted small fw-semibold text-uppercase">Total Tickets</div>
-                <div class="fs-4 fw-bold text-dark">{{ $stats['total'] }}</div>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="text-muted small fw-semibold text-uppercase">Total Tickets</div>
+                    @if($isAllTickets)
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle small px-2 py-0">Active</span>
+                    @endif
+                </div>
+                <div class="fs-4 fw-bold text-body">{{ $stats['total'] }}</div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-6 col-md-3">
-        <a href="{{ route('admin.tickets.index', ['status' => 'Open']) }}" class="card text-decoration-none text-dark shadow-sm border-0 border-start border-4 border-danger h-100">
+        <a href="{{ route('admin.tickets.index', ['status' => 'Open']) }}" class="card text-decoration-none text-body shadow-sm border-0 border-start border-4 border-danger h-100 ticket-filter-card position-relative {{ $isOpen ? 'is-active' : '' }}" title="Filter by Open Tickets">
             <div class="card-body py-3">
-                <div class="text-muted small fw-semibold text-uppercase">Open Tickets</div>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="text-muted small fw-semibold text-uppercase">Open Tickets</div>
+                    @if($isOpen)
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle small px-2 py-0">Active</span>
+                    @endif
+                </div>
                 <div class="fs-4 fw-bold text-danger">{{ $stats['open'] }}</div>
             </div>
         </a>
     </div>
     <div class="col-6 col-md-3">
-        <a href="{{ route('admin.tickets.index', ['status' => 'In Progress']) }}" class="card text-decoration-none text-dark shadow-sm border-0 border-start border-4 border-warning h-100">
+        <a href="{{ route('admin.tickets.index', ['status' => 'In Progress']) }}" class="card text-decoration-none text-body shadow-sm border-0 border-start border-4 border-warning h-100 ticket-filter-card position-relative {{ $isInProgress ? 'is-active' : '' }}" title="Filter by In Progress Tickets">
             <div class="card-body py-3">
-                <div class="text-muted small fw-semibold text-uppercase">In Progress</div>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="text-muted small fw-semibold text-uppercase">In Progress</div>
+                    @if($isInProgress)
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small px-2 py-0">Active</span>
+                    @endif
+                </div>
                 <div class="fs-4 fw-bold text-warning-emphasis">{{ $stats['in_progress'] }}</div>
             </div>
         </a>
     </div>
     <div class="col-6 col-md-3">
-        <a href="{{ route('admin.tickets.index', ['status' => 'Resolved']) }}" class="card text-decoration-none text-dark shadow-sm border-0 border-start border-4 border-success h-100">
+        <a href="{{ route('admin.tickets.index', ['status' => 'Resolved']) }}" class="card text-decoration-none text-body shadow-sm border-0 border-start border-4 border-success h-100 ticket-filter-card position-relative {{ $isResolved ? 'is-active' : '' }}" title="Filter by Resolved Tickets">
             <div class="card-body py-3">
-                <div class="text-muted small fw-semibold text-uppercase">Resolved / Closed</div>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="text-muted small fw-semibold text-uppercase">Resolved / Closed</div>
+                    @if($isResolved)
+                        <span class="badge bg-success-subtle text-success border border-success-subtle small px-2 py-0">Active</span>
+                    @endif
+                </div>
                 <div class="fs-4 fw-bold text-success">{{ $stats['resolved'] }}</div>
             </div>
         </a>
@@ -61,16 +117,16 @@
     <div class="card-body">
         <form method="GET" action="{{ route('admin.tickets.index') }}" class="row g-2 align-items-end">
             <!-- Search Query -->
-            <div class="col-md-3">
+            <div class="col-12 col-md-6 col-xl-3">
                 <label for="searchQuery" class="form-label small fw-semibold mb-1">Search Tickets or Users</label>
                 <div class="input-group">
-                    <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                    <span class="input-group-text"><i class="bi bi-search text-muted"></i></span>
                     <input type="text" class="form-control" id="searchQuery" name="q" value="{{ request('q') }}" placeholder="Subject, user name, email...">
                 </div>
             </div>
 
             <!-- Status Filter -->
-            <div class="col-md-2">
+            <div class="col-6 col-md-3 col-xl-2">
                 <label for="filterStatus" class="form-label small fw-semibold mb-1">Status</label>
                 <select class="form-select" id="filterStatus" name="status">
                     <option value="">All Statuses</option>
@@ -81,7 +137,7 @@
             </div>
 
             <!-- Category Filter -->
-            <div class="col-md-2">
+            <div class="col-6 col-md-3 col-xl-2">
                 <label for="filterCategory" class="form-label small fw-semibold mb-1">Category</label>
                 <select class="form-select" id="filterCategory" name="category">
                     <option value="">All Categories</option>
@@ -92,7 +148,7 @@
             </div>
 
             <!-- Priority Filter -->
-            <div class="col-md-2">
+            <div class="col-6 col-md-3 col-xl-1">
                 <label for="filterPriority" class="form-label small fw-semibold mb-1">Priority</label>
                 <select class="form-select" id="filterPriority" name="priority">
                     <option value="">All Priorities</option>
@@ -103,7 +159,7 @@
             </div>
 
             <!-- Assigned Staff Filter -->
-            <div class="col-md-2">
+            <div class="col-6 col-md-3 col-xl-2">
                 <label for="filterAssigned" class="form-label small fw-semibold mb-1">Assigned Agent</label>
                 <select class="form-select" id="filterAssigned" name="assigned_to">
                     <option value="">All Staff</option>
@@ -114,14 +170,16 @@
                 </select>
             </div>
 
-            <!-- Submit & Reset -->
-            <div class="col-md-1 d-flex gap-1">
-                <button type="submit" class="btn btn-dark w-100" title="Filter">
+            <!-- Submit & Reset Buttons -->
+            <div class="col-12 col-md-6 col-xl-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-1 shadow-sm flex-grow-1" title="Apply Filters">
                     <i class="bi bi-funnel"></i>
+                    <span>Filter</span>
                 </button>
                 @if(request()->hasAny(['q', 'status', 'category', 'priority', 'assigned_to']))
-                    <a href="{{ route('admin.tickets.index') }}" class="btn btn-outline-secondary" title="Reset Filters">
+                    <a href="{{ route('admin.tickets.index') }}" class="btn btn-outline-secondary d-inline-flex align-items-center justify-content-center gap-1 px-3" title="Reset Filters">
                         <i class="bi bi-x-circle"></i>
+                        <span>Reset</span>
                     </a>
                 @endif
             </div>
@@ -131,7 +189,7 @@
 
 <!-- Tickets Table Card -->
 <div class="card shadow-sm border-0">
-    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+    <div class="card-header py-3 border-bottom d-flex justify-content-between align-items-center">
         <h6 class="mb-0 fw-bold">
             <i class="bi bi-ticket-detailed me-1 text-primary"></i> All Support Tickets
             <span class="badge bg-secondary-subtle text-secondary ms-2">{{ $tickets->total() }} total</span>
@@ -167,11 +225,11 @@
                         <tr>
                             <td class="text-muted small">#{{ $ticket->id }}</td>
                             <td>
-                                <div class="fw-bold text-dark">{{ $ticket->user->name ?? 'User' }}</div>
+                                <div class="fw-bold text-body">{{ $ticket->user->name ?? 'User' }}</div>
                                 <div class="text-muted small">{{ $ticket->user->email ?? 'N/A' }}</div>
                             </td>
                             <td>
-                                <a href="{{ route('admin.tickets.show', $ticket) }}" class="fw-bold text-decoration-none text-dark d-block">
+                                <a href="{{ route('admin.tickets.show', $ticket) }}" class="fw-bold text-decoration-none text-body d-block">
                                     {{ $ticket->subject }}
                                 </a>
                                 @if($ticket->conversation_id)
@@ -186,7 +244,7 @@
                                 @endif
                             </td>
                             <td>
-                                <span class="badge bg-light text-dark border">{{ $ticket->category }}</span>
+                                <span class="badge bg-body-secondary text-body border">{{ $ticket->category }}</span>
                             </td>
                             <td>
                                 <span class="badge {{ $ticket->priorityBadgeClass }} px-2 py-1">
@@ -204,7 +262,7 @@
                                         <i class="bi bi-person-check me-1"></i>{{ $ticket->assignedTo->name }}
                                     </span>
                                 @else
-                                    <span class="badge bg-light text-muted border px-2 py-1">
+                                    <span class="badge bg-body-secondary text-secondary border px-2 py-1">
                                         Unassigned
                                     </span>
                                 @endif
@@ -225,7 +283,7 @@
         </div>
 
         @if($tickets->hasPages())
-            <div class="card-footer bg-white py-3 border-top d-flex justify-content-center">
+            <div class="card-footer py-3 border-top d-flex justify-content-center">
                 {{ $tickets->links('pagination::bootstrap-5') }}
             </div>
         @endif

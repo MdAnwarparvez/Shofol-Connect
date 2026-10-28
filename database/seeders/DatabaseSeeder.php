@@ -47,6 +47,9 @@ class DatabaseSeeder extends Seeder
         // Seed Default Verified Policy FAQs (Idempotent)
         $this->call(FaqSeeder::class);
 
+        // Seed Official 29 Knowledge Base Articles (Idempotent)
+        $this->call(KnowledgeBaseArticleSeeder::class);
+
         // Seed Sample Knowledge Articles
         $adminUser = User::where('email', 'admin@shofolconnect.com')->first();
         $adminId = $adminUser ? $adminUser->id : null;

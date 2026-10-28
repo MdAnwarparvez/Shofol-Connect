@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\Faq;
 use App\Models\KnowledgeArticle;
+use App\Models\KnowledgeCategory;
 use App\Models\ShofolModule;
 use App\Models\User;
 use Database\Seeders\ShofolModuleSeeder;
@@ -323,7 +325,7 @@ test('admin cannot delete module when knowledge articles reference its code', fu
         'code' => 'PROT',
     ]);
 
-    KnowledgeArticle::factory()->create([
+    $article = KnowledgeArticle::factory()->create([
         'module' => 'PROT',
         'title' => 'Referencing Article',
         'created_by' => $admin->id,
@@ -333,10 +335,86 @@ test('admin cannot delete module when knowledge articles reference its code', fu
 
     $response->assertRedirect('/admin/modules');
     $response->assertSessionHas('error');
+    expect(session('error'))->toContain('knowledge article is currently referencing it');
     $this->assertDatabaseHas('shofol_modules', ['id' => $module->id]);
+    $this->assertDatabaseHas('knowledge_articles', ['id' => $article->id]);
 });
 
-test('admin can delete module when no knowledge articles reference it', function () {
+test('admin cannot delete module when knowledge categories reference it', function () {
+    $admin = User::factory()->admin()->create();
+    $module = ShofolModule::factory()->create([
+        'name' => 'Module With Categories',
+        'code' => 'MODCAT',
+    ]);
+
+    $category = KnowledgeCategory::factory()->create([
+        'shofol_module_id' => $module->id,
+        'name' => 'Operations Policy',
+    ]);
+
+    $response = $this->actingAs($admin)->delete("/admin/modules/{$module->id}");
+
+    $response->assertRedirect('/admin/modules');
+    $response->assertSessionHas('error');
+    expect(session('error'))->toContain('knowledge category is currently referencing it');
+    $this->assertDatabaseHas('shofol_modules', ['id' => $module->id]);
+    // Ensure related category was not deleted automatically
+    $this->assertDatabaseHas('knowledge_categories', ['id' => $category->id]);
+});
+
+test('admin cannot delete module when faqs reference it', function () {
+    $admin = User::factory()->admin()->create();
+    $module = ShofolModule::factory()->create([
+        'name' => 'Module With FAQs',
+        'code' => 'MODFAQ',
+    ]);
+
+    $faq = Faq::factory()->create([
+        'shofol_module_id' => $module->id,
+        'question' => 'What is the leave policy?',
+    ]);
+
+    $response = $this->actingAs($admin)->delete("/admin/modules/{$module->id}");
+
+    $response->assertRedirect('/admin/modules');
+    $response->assertSessionHas('error');
+    expect(session('error'))->toContain('FAQ is currently referencing it');
+    $this->assertDatabaseHas('shofol_modules', ['id' => $module->id]);
+    // Ensure related FAQ was not deleted automatically
+    $this->assertDatabaseHas('faqs', ['id' => $faq->id]);
+});
+
+test('admin cannot delete module when multiple related record types reference it', function () {
+    $admin = User::factory()->admin()->create();
+    $module = ShofolModule::factory()->create([
+        'name' => 'Human Resource Management',
+        'code' => 'HRM',
+    ]);
+
+    $category = KnowledgeCategory::factory()->create([
+        'shofol_module_id' => $module->id,
+        'name' => 'Leave Policy',
+    ]);
+
+    $faq = Faq::factory()->create([
+        'shofol_module_id' => $module->id,
+        'knowledge_category_id' => $category->id,
+        'question' => 'How many casual leaves are allowed?',
+    ]);
+
+    $response = $this->actingAs($admin)->delete("/admin/modules/{$module->id}");
+
+    $response->assertRedirect('/admin/modules');
+    $response->assertSessionHas('error');
+    $errorMessage = session('error');
+    expect($errorMessage)->toContain('knowledge category is');
+    expect($errorMessage)->toContain('FAQ is');
+    $this->assertDatabaseHas('shofol_modules', ['id' => $module->id]);
+    $this->assertDatabaseHas('knowledge_categories', ['id' => $category->id]);
+    $this->assertDatabaseHas('faqs', ['id' => $faq->id]);
+});
+
+test('admin can delete module when no related records reference it', function () {
     $admin = User::factory()->admin()->create();
     $module = ShofolModule::factory()->create([
         'name' => 'Empty Module',
@@ -347,6 +425,7 @@ test('admin can delete module when no knowledge articles reference it', function
 
     $response->assertRedirect('/admin/modules');
     $response->assertSessionHas('success');
+    expect(session('success'))->toContain('was deleted successfully');
     $this->assertDatabaseMissing('shofol_modules', ['id' => $module->id]);
 });
 
@@ -361,6 +440,37 @@ test('ShofolModuleSeeder is idempotent and creates 4 core modules without duplic
     $seeder->run();
 
     expect(ShofolModule::whereIn('code', ['HRM', 'Payroll', 'CRM', 'Accounting'])->count())->toBe(4);
+});
+
+test('ShofolModuleSeeder seeds all 8 business modules idempotently', function () {
+    $seeder = new ShofolModuleSeeder();
+    $seeder->run();
+
+    $expectedCodes = ['HRM', 'Payroll', 'CRM', 'Accounting', 'Inventory', 'General', 'POS', 'Field-Automation'];
+    expect(ShofolModule::whereIn('code', $expectedCodes)->count())->toBe(8);
+
+    // Run again to verify idempotency
+    $seeder->run();
+    expect(ShofolModule::whereIn('code', $expectedCodes)->count())->toBe(8);
+});
+
+test('model deleting lifecycle hook blocks programmatic deletion when dependencies exist', function () {
+    $admin = User::factory()->admin()->create();
+    $module = ShofolModule::factory()->create([
+        'name' => 'Direct Delete Blocked',
+        'code' => 'DDBLOCK',
+    ]);
+
+    KnowledgeArticle::factory()->create([
+        'module' => 'DDBLOCK',
+        'title' => 'Direct Delete Guard Test',
+        'created_by' => $admin->id,
+    ]);
+
+    expect(fn () => $module->delete())
+        ->toThrow(\RuntimeException::class, 'currently referencing it');
+
+    $this->assertDatabaseHas('shofol_modules', ['id' => $module->id]);
 });
 
 test('dynamic module articles are fully compatible with RAG retrieval', function () {

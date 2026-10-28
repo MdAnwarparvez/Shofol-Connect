@@ -46,6 +46,38 @@ class ShofolModuleSeeder extends Seeder
                 'is_active' => true,
                 'sort_order' => 4,
             ],
+            [
+                'name' => 'Inventory Management',
+                'code' => 'Inventory',
+                'icon' => 'bi-boxes',
+                'description' => 'Stock auditing, product quantities, warehouse transfers, and multi-location inventory records.',
+                'is_active' => true,
+                'sort_order' => 5,
+            ],
+            [
+                'name' => 'General System Support',
+                'code' => 'General',
+                'icon' => 'bi-gear',
+                'description' => 'System authentication, user account permissions, and cross-platform mobile application troubleshooting.',
+                'is_active' => true,
+                'sort_order' => 6,
+            ],
+            [
+                'name' => 'Point of Sale (POS)',
+                'code' => 'POS',
+                'icon' => 'bi-shop',
+                'description' => 'Counter sales transactions, barcode scanning, register reconciliation, and outlet stock operations.',
+                'is_active' => true,
+                'sort_order' => 7,
+            ],
+            [
+                'name' => 'Field Automation',
+                'code' => 'Field-Automation',
+                'icon' => 'bi-geo-alt',
+                'description' => 'Sales representative visit plans, GPS store check-ins, customer meeting tracking, and field expense claims.',
+                'is_active' => true,
+                'sort_order' => 8,
+            ],
         ];
 
         foreach ($defaultModules as $mod) {

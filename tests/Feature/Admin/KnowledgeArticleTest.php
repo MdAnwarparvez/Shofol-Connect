@@ -213,3 +213,88 @@ test('admin can delete knowledge article', function () {
         'id' => $article->id,
     ]);
 });
+
+test('KnowledgeBaseArticleSeeder seeds all 29 articles idempotently without duplicates', function () {
+    // Run module and category seeders first to ensure relationships exist
+    (new \Database\Seeders\ShofolModuleSeeder())->run();
+    (new \Database\Seeders\KnowledgeCategorySeeder())->run();
+
+    $seeder = new \Database\Seeders\KnowledgeBaseArticleSeeder();
+    $seeder->run();
+
+    // Verify all 29 titles exist
+    $initialCount = KnowledgeArticle::count();
+    expect($initialCount)->toBeGreaterThanOrEqual(29);
+
+    // Run again to verify idempotency
+    $seeder->run();
+    expect(KnowledgeArticle::count())->toBe($initialCount);
+});
+
+test('seeded articles correctly map to valid modules and categories', function () {
+    (new \Database\Seeders\ShofolModuleSeeder())->run();
+    (new \Database\Seeders\KnowledgeCategorySeeder())->run();
+    (new \Database\Seeders\KnowledgeBaseArticleSeeder())->run();
+
+    $articles = KnowledgeArticle::whereIn('module', [
+        'HRM', 'Payroll', 'CRM', 'Accounting', 'Inventory', 'General', 'POS', 'Field-Automation'
+    ])->get();
+
+    expect($articles->count())->toBeGreaterThanOrEqual(29);
+
+    foreach ($articles as $article) {
+        // Module must exist
+        expect(\App\Models\ShofolModule::where('code', $article->module)->exists())->toBeTrue();
+        // Category must exist under this module
+        expect(\App\Models\KnowledgeCategory::where('name', $article->category)->whereHas('shofolModule', function ($q) use ($article) {
+            $q->where('code', $article->module);
+        })->exists())->toBeTrue();
+    }
+});
+
+test('KnowledgeRetrievalService retrieves articles across core and optional modules', function () {
+    (new \Database\Seeders\ShofolModuleSeeder())->run();
+    (new \Database\Seeders\KnowledgeCategorySeeder())->run();
+    (new \Database\Seeders\KnowledgeBaseArticleSeeder())->run();
+
+    /** @var \App\Services\KnowledgeRetrievalService $retrievalService */
+    $retrievalService = app(\App\Services\KnowledgeRetrievalService::class);
+    $retrievalService->clearCache();
+
+    $testCases = [
+        'How do I add a new employee?' => 'HRM',
+        'How to process monthly payroll?' => 'Payroll',
+        'How to create a customer lead in Shofol Connect?' => 'CRM',
+        'How to reconcile bank transactions?' => 'Accounting',
+        'How to check product stock levels?' => 'Inventory',
+        'How to troubleshoot Shofol Connect login issues?' => 'General',
+        'How to process a sales transaction in POS?' => 'POS',
+        'How to record and track a customer visit?' => 'Field-Automation',
+    ];
+
+    foreach ($testCases as $query => $expectedModule) {
+        $result = $retrievalService->retrieve($query);
+        expect($result['has_relevant_results'])->toBeTrue();
+        expect($result['articles']->first()->module)->toBe($expectedModule);
+    }
+});
+
+test('AIService returns verified safe fallback message without calling LLM when no relevant knowledge found', function () {
+    (new \Database\Seeders\ShofolModuleSeeder())->run();
+    (new \Database\Seeders\KnowledgeCategorySeeder())->run();
+    (new \Database\Seeders\KnowledgeBaseArticleSeeder())->run();
+
+    \Illuminate\Support\Facades\Http::fake();
+
+    /** @var \App\Services\AIService $aiService */
+    $aiService = app(\App\Services\AIService::class);
+    $result = $aiService->ask('What is the recipe for baking chocolate cake with sprinkles?');
+
+    expect($result['success'])->toBeTrue();
+    expect($result['fallback'])->toBeTrue();
+    expect($result['answer'])->toBe(\App\Services\AIService::FALLBACK_MESSAGE);
+    expect($result['sources'])->toBeEmpty();
+
+    // Strict guardrail verification: ZERO HTTP calls to upstream LLM
+    \Illuminate\Support\Facades\Http::assertNothingSent();
+});

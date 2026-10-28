@@ -19,6 +19,10 @@ class KnowledgeArticle extends Model
         'Payroll',
         'CRM',
         'Accounting',
+        'Inventory',
+        'General',
+        'POS',
+        'Field-Automation',
     ];
 
     /**

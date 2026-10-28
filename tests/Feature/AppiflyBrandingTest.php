@@ -356,5 +356,59 @@ test('guest layout provides theme toggle button and anti-FOUC protection', funct
     expect($html)->toContain("localStorage.getItem('shofol_theme') || 'light'");
 });
 
+test('sidebar includes compact ChatGPT-style search bar positioned between brand header and new chat button', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->get('/dashboard');
+    $response->assertStatus(200);
+
+    $html = $response->getContent();
+
+    // Verify search container, input, icon, and clear button exist
+    expect($html)->toContain('class="sidebar-search-container');
+    expect($html)->toContain('id="sidebarChatSearch"');
+    expect($html)->toContain('placeholder="Search chats"');
+    expect($html)->toContain('class="bi bi-search sidebar-search-icon"');
+    expect($html)->toContain('id="sidebarChatSearchClear"');
+
+    // Verify ordering: Sidebar header -> Search container -> New Chat CTA
+    $headerPos = strpos($html, 'class="sidebar-header');
+    $searchPos = strpos($html, 'id="sidebarChatSearch"');
+    $newChatPos = strpos($html, 'class="sidebar-new-chat-btn');
+
+    expect($headerPos)->not->toBeFalse();
+    expect($searchPos)->not->toBeFalse();
+    expect($newChatPos)->not->toBeFalse();
+
+    expect($searchPos)->toBeGreaterThan($headerPos);
+    expect($newChatPos)->toBeGreaterThan($searchPos);
+});
+
+test('layout prevents duplicate branding and toggle buttons across sidebar and topbar', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->get('/dashboard');
+    $response->assertStatus(200);
+
+    $html = $response->getContent();
+
+    // Topbar brand logo is suppressed with display: none to ensure only one brand logo is visible
+    expect($html)->toContain('.collapsed-topbar-brand {');
+    expect($html)->toContain('display: none !important;');
+
+    // Desktop expanded mode hides topbar toggle button to ensure only one toggle button is visible
+    expect($html)->toContain('.app-shell:not(.sidebar-collapsed) .workspace-topbar .sidebar-toggle-btn {');
+    expect($html)->toContain('display: none !important;');
+
+    // Desktop collapsed mode shows topbar toggle button
+    expect($html)->toContain('.app-shell.sidebar-collapsed .workspace-topbar .sidebar-toggle-btn {');
+    expect($html)->toContain('display: inline-flex !important;');
+
+    // Brand logo has fixed dimensions and margin reset to prevent overlapping brand text
+    expect($html)->toContain('margin: 0 !important;');
+    expect($html)->toContain('gap: 0.65rem;');
+    expect($html)->toContain('width: 30px;');
+    expect($html)->toContain('height: 30px;');
+});
 
 

@@ -2,6 +2,34 @@
 
 @section('title', 'Knowledge Base Management — Shofol Connect')
 
+@section('styles')
+<style>
+    .kb-module-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        cursor: pointer;
+    }
+    .kb-module-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08) !important;
+    }
+    .kb-module-card.is-active {
+        box-shadow: 0 0 0 2px var(--brand-primary), 0 0.5rem 1rem rgba(13, 110, 253, 0.15) !important;
+    }
+    [data-bs-theme="dark"] .kb-module-card.is-active {
+        box-shadow: 0 0 0 2px var(--brand-primary), 0 0.5rem 1rem rgba(59, 130, 246, 0.25) !important;
+    }
+    [data-bs-theme="dark"] .btn-outline-secondary {
+        color: #cbd5e1;
+        border-color: #475569;
+    }
+    [data-bs-theme="dark"] .btn-outline-secondary:hover {
+        background-color: #334155;
+        border-color: #64748b;
+        color: #ffffff;
+    }
+</style>
+@endsection
+
 @section('content')
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
     <div>
@@ -26,16 +54,23 @@
     </div>
 </div>
 
+@php
+    $selectedModule = request('module');
+@endphp
+
 <!-- Department Overview Stats -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
-        <a href="{{ route('admin.knowledge-articles.index', ['module' => 'HRM']) }}" class="card text-decoration-none text-dark shadow-sm border-0 border-start border-4 border-primary h-100">
+        <a href="{{ route('admin.knowledge-articles.index', ['module' => 'HRM']) }}" class="card text-decoration-none text-body shadow-sm border-0 border-start border-4 border-primary h-100 kb-module-card position-relative {{ $selectedModule === 'HRM' ? 'is-active' : '' }}" title="Filter by HRM">
             <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="text-muted small fw-semibold text-uppercase">HRM</div>
+                    @if($selectedModule === 'HRM')
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle small px-2 py-0">Active</span>
+                    @endif
+                </div>
                 <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small fw-semibold text-uppercase">HRM</div>
-                        <div class="fs-4 fw-bold">{{ $moduleCounts['HRM'] ?? 0 }}</div>
-                    </div>
+                    <div class="fs-4 fw-bold text-body">{{ $moduleCounts['HRM'] ?? 0 }}</div>
                     <div class="bg-primary-subtle text-primary p-2 rounded lh-1">
                         <i class="bi bi-people-fill fs-5"></i>
                     </div>
@@ -45,13 +80,16 @@
     </div>
 
     <div class="col-6 col-md-3">
-        <a href="{{ route('admin.knowledge-articles.index', ['module' => 'Payroll']) }}" class="card text-decoration-none text-dark shadow-sm border-0 border-start border-4 border-success h-100">
+        <a href="{{ route('admin.knowledge-articles.index', ['module' => 'Payroll']) }}" class="card text-decoration-none text-body shadow-sm border-0 border-start border-4 border-success h-100 kb-module-card position-relative {{ $selectedModule === 'Payroll' ? 'is-active' : '' }}" title="Filter by Payroll">
             <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="text-muted small fw-semibold text-uppercase">Payroll</div>
+                    @if($selectedModule === 'Payroll')
+                        <span class="badge bg-success-subtle text-success border border-success-subtle small px-2 py-0">Active</span>
+                    @endif
+                </div>
                 <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small fw-semibold text-uppercase">Payroll</div>
-                        <div class="fs-4 fw-bold">{{ $moduleCounts['Payroll'] ?? 0 }}</div>
-                    </div>
+                    <div class="fs-4 fw-bold text-body">{{ $moduleCounts['Payroll'] ?? 0 }}</div>
                     <div class="bg-success-subtle text-success p-2 rounded lh-1">
                         <i class="bi bi-cash-stack fs-5"></i>
                     </div>
@@ -61,13 +99,16 @@
     </div>
 
     <div class="col-6 col-md-3">
-        <a href="{{ route('admin.knowledge-articles.index', ['module' => 'CRM']) }}" class="card text-decoration-none text-dark shadow-sm border-0 border-start border-4 border-info h-100">
+        <a href="{{ route('admin.knowledge-articles.index', ['module' => 'CRM']) }}" class="card text-decoration-none text-body shadow-sm border-0 border-start border-4 border-info h-100 kb-module-card position-relative {{ $selectedModule === 'CRM' ? 'is-active' : '' }}" title="Filter by CRM">
             <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="text-muted small fw-semibold text-uppercase">CRM</div>
+                    @if($selectedModule === 'CRM')
+                        <span class="badge bg-info-subtle text-info border border-info-subtle small px-2 py-0">Active</span>
+                    @endif
+                </div>
                 <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small fw-semibold text-uppercase">CRM</div>
-                        <div class="fs-4 fw-bold">{{ $moduleCounts['CRM'] ?? 0 }}</div>
-                    </div>
+                    <div class="fs-4 fw-bold text-body">{{ $moduleCounts['CRM'] ?? 0 }}</div>
                     <div class="bg-info-subtle text-info p-2 rounded lh-1">
                         <i class="bi bi-person-lines-fill fs-5"></i>
                     </div>
@@ -77,13 +118,16 @@
     </div>
 
     <div class="col-6 col-md-3">
-        <a href="{{ route('admin.knowledge-articles.index', ['module' => 'Accounting']) }}" class="card text-decoration-none text-dark shadow-sm border-0 border-start border-4 border-warning h-100">
+        <a href="{{ route('admin.knowledge-articles.index', ['module' => 'Accounting']) }}" class="card text-decoration-none text-body shadow-sm border-0 border-start border-4 border-warning h-100 kb-module-card position-relative {{ $selectedModule === 'Accounting' ? 'is-active' : '' }}" title="Filter by Accounting">
             <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="text-muted small fw-semibold text-uppercase">Accounting</div>
+                    @if($selectedModule === 'Accounting')
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small px-2 py-0">Active</span>
+                    @endif
+                </div>
                 <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small fw-semibold text-uppercase">Accounting</div>
-                        <div class="fs-4 fw-bold">{{ $moduleCounts['Accounting'] ?? 0 }}</div>
-                    </div>
+                    <div class="fs-4 fw-bold text-body">{{ $moduleCounts['Accounting'] ?? 0 }}</div>
                     <div class="bg-warning-subtle text-warning p-2 rounded lh-1">
                         <i class="bi bi-calculator-fill fs-5"></i>
                     </div>
@@ -101,7 +145,7 @@
             <div class="col-md-5">
                 <label for="searchQuery" class="form-label small fw-semibold mb-1">Search Keywords or Content</label>
                 <div class="input-group">
-                    <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                    <span class="input-group-text"><i class="bi bi-search text-muted"></i></span>
                     <input type="text" class="form-control" id="searchQuery" name="q" value="{{ request('q') }}" placeholder="Title, question, keywords, category...">
                 </div>
             </div>
@@ -130,11 +174,12 @@
 
             <!-- Filter Buttons -->
             <div class="col-md-2 d-flex gap-2">
-                <button type="submit" class="btn btn-dark w-100">
-                    <i class="bi bi-funnel me-1"></i>Filter
+                <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-1 shadow-sm w-100" title="Apply Filters">
+                    <i class="bi bi-funnel"></i>
+                    <span>Filter</span>
                 </button>
                 @if(request()->hasAny(['q', 'module', 'status']))
-                    <a href="{{ route('admin.knowledge-articles.index') }}" class="btn btn-outline-secondary" title="Reset Filters">
+                    <a href="{{ route('admin.knowledge-articles.index') }}" class="btn btn-outline-secondary d-inline-flex align-items-center justify-content-center px-3" title="Reset Filters">
                         <i class="bi bi-x-circle"></i>
                     </a>
                 @endif
@@ -145,7 +190,7 @@
 
 <!-- Articles Table Card -->
 <div class="card shadow-sm border-0">
-    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+    <div class="card-header py-3 border-bottom d-flex justify-content-between align-items-center">
         <h6 class="mb-0 fw-bold">
             <i class="bi bi-card-list me-1 text-primary"></i> Articles List
             <span class="badge bg-secondary-subtle text-secondary ms-2">{{ $articles->total() }} total</span>
@@ -184,7 +229,7 @@
                             </span>
                         </td>
                         <td>
-                            <a href="{{ route('admin.knowledge-articles.show', $article) }}" class="fw-bold text-decoration-none text-dark d-block">
+                            <a href="{{ route('admin.knowledge-articles.show', $article) }}" class="fw-bold text-decoration-none text-body d-block">
                                 {{ $article->title }}
                             </a>
                             @if($article->question)
@@ -195,13 +240,13 @@
                             @if($article->keywords)
                                 <div class="mt-1">
                                     @foreach(array_slice(array_map('trim', explode(',', $article->keywords)), 0, 3) as $tag)
-                                        <span class="badge bg-light text-secondary border small">{{ $tag }}</span>
+                                        <span class="badge bg-body-secondary text-secondary border small">{{ $tag }}</span>
                                     @endforeach
                                 </div>
                             @endif
                         </td>
                         <td>
-                            <span class="badge bg-light text-dark border">{{ $article->category }}</span>
+                            <span class="badge bg-body-secondary text-body border">{{ $article->category }}</span>
                         </td>
                         <td>
                             @if($article->status === 'active')
@@ -264,7 +309,7 @@
     </div>
 
     @if($articles->hasPages())
-        <div class="card-footer bg-white py-3 border-top d-flex justify-content-center">
+        <div class="card-footer py-3 border-top d-flex justify-content-center">
             {{ $articles->links('pagination::bootstrap-5') }}
         </div>
     @endif

@@ -46,6 +46,20 @@ class ShofolModule extends Model
     }
 
     /**
+     * Boot model events for lifecycle safety and protection.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(function (ShofolModule $module) {
+            if (!$module->canBeDeleted()) {
+                $descriptions = $module->getReferencingRecordDescriptions();
+                $reason = implode(', ', $descriptions);
+                throw new \RuntimeException("Cannot delete module '{$module->name}' ({$module->code}) because {$reason} currently referencing it.");
+            }
+        });
+    }
+
+    /**
      * Scope to only include active modules.
      */
     public function scopeActive(Builder $query): Builder
@@ -94,10 +108,39 @@ class ShofolModule extends Model
     }
 
     /**
-     * Check if the module can be safely deleted (no knowledge articles or FAQs referencing it).
+     * Check if the module can be safely deleted (no knowledge articles, categories, or FAQs referencing it).
      */
     public function canBeDeleted(): bool
     {
-        return $this->knowledgeArticles()->count() === 0 && $this->faqs()->count() === 0;
+        return $this->knowledgeArticles()->count() === 0
+            && $this->categories()->count() === 0
+            && $this->faqs()->count() === 0;
+    }
+
+    /**
+     * Get a descriptive list of related records blocking deletion.
+     *
+     * @return list<string>
+     */
+    public function getReferencingRecordDescriptions(): array
+    {
+        $parts = [];
+
+        $articleCount = $this->knowledgeArticles()->count();
+        if ($articleCount > 0) {
+            $parts[] = "{$articleCount} knowledge " . ($articleCount === 1 ? 'article is' : 'articles are');
+        }
+
+        $categoryCount = $this->categories()->count();
+        if ($categoryCount > 0) {
+            $parts[] = "{$categoryCount} knowledge " . ($categoryCount === 1 ? 'category is' : 'categories are');
+        }
+
+        $faqCount = $this->faqs()->count();
+        if ($faqCount > 0) {
+            $parts[] = "{$faqCount} " . ($faqCount === 1 ? 'FAQ is' : 'FAQs are');
+        }
+
+        return $parts;
     }
 }

@@ -17,7 +17,7 @@ class ShofolModuleController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = ShofolModule::query()->withCount('knowledgeArticles');
+        $query = ShofolModule::query()->withCount(['knowledgeArticles', 'categories', 'faqs']);
 
         if ($request->filled('q')) {
             $search = trim($request->input('q'));
@@ -121,32 +121,35 @@ class ShofolModuleController extends Controller
     }
 
     /**
-     * Remove the specified module from storage if not referenced by knowledge articles.
+     * Remove the specified module from storage if not referenced by knowledge articles, categories, or FAQs.
      */
     public function destroy(ShofolModule $module): RedirectResponse
     {
-        $articleCount = $module->knowledgeArticles()->count();
-        $faqCount = $module->faqs()->count();
+        $parts = $module->getReferencingRecordDescriptions();
 
-        if ($articleCount > 0 || $faqCount > 0) {
-            $parts = [];
-            if ($articleCount > 0) {
-                $parts[] = "{$articleCount} knowledge " . ($articleCount === 1 ? 'article is' : 'articles are');
-            }
-            if ($faqCount > 0) {
-                $parts[] = "{$faqCount} " . ($faqCount === 1 ? 'FAQ is' : 'FAQs are');
-            }
+        if (!empty($parts)) {
+            $last = array_pop($parts);
+            $reason = count($parts) > 0 ? implode(', ', $parts) . ' and ' . $last : $last;
+
             return redirect()
                 ->route('admin.modules.index')
-                ->with('error', "Cannot delete module \"{$module->name}\" ({$module->code}) because " . implode(' and ', $parts) . " currently referencing it. Please reassign or delete the referenced items first.");
+                ->with('error', "Cannot delete module \"{$module->name}\" ({$module->code}) because {$reason} currently referencing it. Please reassign or delete the referenced items first.");
         }
 
-        $name = $module->name;
-        $code = $module->code;
-        $module->delete();
+        try {
+            $name = $module->name;
+            $code = $module->code;
+            $module->delete();
 
-        return redirect()
-            ->route('admin.modules.index')
-            ->with('success', "Module \"{$name}\" ({$code}) was deleted successfully.");
+            return redirect()
+                ->route('admin.modules.index')
+                ->with('success', "Module \"{$name}\" ({$code}) was deleted successfully.");
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route('admin.modules.index')
+                ->with('error', "Failed to delete module \"{$module->name}\" ({$module->code}) due to an unexpected database error. Please ensure all related records are removed first.");
+        }
     }
 }

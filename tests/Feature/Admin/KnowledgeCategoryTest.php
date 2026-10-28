@@ -358,20 +358,21 @@ test('default categories listing displays all seeded categories when no filters 
     // Ensure seeded categories exist
     (new ShofolModuleSeeder())->run();
     (new KnowledgeCategorySeeder())->run();
+    $totalCount = KnowledgeCategory::count();
 
     $response = $this->actingAs($admin)->get('/admin/categories');
 
     $response->assertStatus(200);
     $response->assertSee('Knowledge Category Management');
-    $response->assertSee('Configured Categories (12)');
+    $response->assertSee("Configured Categories ({$totalCount})");
     $response->assertDontSee('No Categories Found');
 
     // Verify seeded category names appear
     $response->assertSee('Leave Policy');
     $response->assertSee('Onboarding & Training');
+    $response->assertSee('Employee Management');
     $response->assertSee('Salary & Tax');
     $response->assertSee('Lead Management');
-    $response->assertSee('Invoicing & Receivables');
 });
 
 test('categories listing displays all categories when filter form is submitted with empty parameters', function () {
@@ -379,24 +380,25 @@ test('categories listing displays all categories when filter form is submitted w
 
     (new ShofolModuleSeeder())->run();
     (new KnowledgeCategorySeeder())->run();
+    $totalCount = KnowledgeCategory::count();
 
     // 1. Submit with empty form fields (q=&module_id=&status=)
     $response = $this->actingAs($admin)->get('/admin/categories?q=&module_id=&status=');
     $response->assertStatus(200);
-    $response->assertSee('Configured Categories (12)');
+    $response->assertSee("Configured Categories ({$totalCount})");
     $response->assertDontSee('No Categories Found');
     $response->assertSee('Leave Policy');
 
     // 2. Submit with empty status param (?status=)
     $responseStatusEmpty = $this->actingAs($admin)->get('/admin/categories?status=');
     $responseStatusEmpty->assertStatus(200);
-    $responseStatusEmpty->assertSee('Configured Categories (12)');
+    $responseStatusEmpty->assertSee("Configured Categories ({$totalCount})");
     $responseStatusEmpty->assertDontSee('No Categories Found');
 
     // 3. Submit with status=all
     $responseStatusAll = $this->actingAs($admin)->get('/admin/categories?status=all');
     $responseStatusAll->assertStatus(200);
-    $responseStatusAll->assertSee('Configured Categories (12)');
+    $responseStatusAll->assertSee("Configured Categories ({$totalCount})");
     $responseStatusAll->assertDontSee('No Categories Found');
 });
 

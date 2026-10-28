@@ -179,25 +179,37 @@
         }
 
         .sidebar-header {
-            padding: 0.85rem 1rem;
+            height: 56px;
+            min-height: 56px;
+            max-height: 56px;
+            padding: 0 0.85rem 0 1rem;
             border-bottom: 1px solid var(--sidebar-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             flex-shrink: 0;
+            box-sizing: border-box;
         }
 
         .navbar-brand {
             transition: opacity 0.2s ease-in-out;
             text-decoration: none;
             padding: 0;
+            margin: 0 !important;
             display: inline-flex;
             align-items: center;
+            gap: 0.65rem;
+            min-width: 0;
+            flex: 1 1 auto;
         }
         .navbar-brand:hover {
             opacity: 0.9;
         }
         .shofol-navbar-logo,
         .appifly-navbar-logo {
+            width: 30px;
             height: 30px;
-            width: auto;
+            max-width: 30px;
             max-height: 30px;
             aspect-ratio: 640 / 533;
             object-fit: contain;
@@ -206,9 +218,14 @@
             transition: transform 0.2s ease-in-out;
         }
         .brand-title {
-            font-size: 1.1rem;
+            font-size: 1.05rem;
+            font-weight: 700;
             letter-spacing: -0.01em;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
+            flex-shrink: 1;
         }
         .navbar-brand:hover .shofol-navbar-logo,
         .navbar-brand:hover .appifly-navbar-logo {
@@ -220,38 +237,13 @@
             .sidebar-header .brand-title {
                 display: none !important;
             }
+            .sidebar-search-container {
+                display: none !important;
+            }
         }
-        /* Collapsed mode topbar brand logo (reopens sidebar on click) */
+        /* Collapsed mode topbar brand logo - hidden to guarantee exactly one brand logo in the sidebar */
         .collapsed-topbar-brand {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: transparent;
-            border: none;
-            padding: 2px;
-            margin: 0;
-            cursor: pointer;
-            text-decoration: none;
-            line-height: 1;
-            transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
-            flex-shrink: 0;
-        }
-        .collapsed-topbar-brand:hover {
-            opacity: 0.85;
-            transform: scale(1.08);
-        }
-        @media (min-width: 992px) {
-            .app-shell.sidebar-collapsed .collapsed-topbar-brand {
-                display: inline-flex;
-            }
-        }
-        @media (max-width: 991.98px) {
-            .collapsed-topbar-brand {
-                display: inline-flex;
-            }
-            .app-shell.sidebar-mobile-open .collapsed-topbar-brand {
-                display: none;
-            }
+            display: none !important;
         }
         .shofol-topbar-logo {
             height: 28px;
@@ -260,15 +252,15 @@
             aspect-ratio: 640 / 533;
             object-fit: contain;
             flex-shrink: 0;
-            display: block;
+            display: none;
         }
 
-        /* Compact Sidebar Toggle Button in Topbar */
+        /* Compact Sidebar Toggle Button in Topbar (visible only when collapsed on desktop or on mobile) */
         .sidebar-toggle-btn {
             width: 32px;
             height: 32px;
             padding: 0;
-            display: inline-flex;
+            display: none;
             align-items: center;
             justify-content: center;
             border-radius: 0.375rem;
@@ -282,6 +274,80 @@
         .sidebar-toggle-btn i {
             font-size: 1rem;
             line-height: 1;
+        }
+
+        .page-topbar-divider {
+            display: none;
+            opacity: 0.4;
+        }
+        .page-topbar-title {
+            line-height: 1.25;
+            min-width: 0;
+            color: var(--theme-body-color, inherit);
+        }
+
+        /* ChatGPT-style Sidebar Search Input */
+        .sidebar-search-container {
+            flex-shrink: 0;
+        }
+        .sidebar-search-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+        .sidebar-search-icon {
+            position: absolute;
+            left: 0.75rem;
+            color: #9ca3af;
+            font-size: 0.825rem;
+            pointer-events: none;
+            z-index: 2;
+            transition: color 0.15s ease;
+        }
+        .sidebar-search-input {
+            background: rgba(255, 255, 255, 0.06) !important;
+            border: 1px solid var(--sidebar-border) !important;
+            color: #ececf1 !important;
+            border-radius: 0.5rem !important;
+            font-size: 0.85rem !important;
+            padding: 0.425rem 1.85rem 0.425rem 2.15rem !important;
+            height: 34px !important;
+            transition: all 0.2s ease !important;
+            box-shadow: none !important;
+            width: 100%;
+        }
+        .sidebar-search-input::placeholder {
+            color: #9ca3af !important;
+            opacity: 0.75;
+        }
+        .sidebar-search-input:focus {
+            background: rgba(255, 255, 255, 0.1) !important;
+            border-color: rgba(255, 255, 255, 0.3) !important;
+            color: #ffffff !important;
+            box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25) !important;
+        }
+        .sidebar-search-wrapper:focus-within .sidebar-search-icon {
+            color: #ffffff;
+        }
+        .sidebar-search-clear {
+            position: absolute;
+            right: 0.35rem;
+            background: transparent;
+            border: none;
+            padding: 0.2rem;
+            color: #9ca3af;
+            font-size: 0.85rem;
+            cursor: pointer;
+            line-height: 1;
+            z-index: 2;
+        }
+        .sidebar-search-clear:hover {
+            color: #ffffff;
+        }
+        .sidebar-conversation-item {
+            font-size: 0.825rem;
+            padding: 0.45rem 0.75rem;
         }
 
         /* New Chat CTA Button */
@@ -406,7 +472,9 @@
 
         /* Workspace Topbar */
         .workspace-topbar {
-            height: 54px;
+            height: 56px;
+            min-height: 56px;
+            max-height: 56px;
             background: var(--theme-topbar-bg);
             border-bottom: 1px solid var(--theme-topbar-border);
             display: flex;
@@ -416,6 +484,7 @@
             flex-shrink: 0;
             z-index: 1020;
             transition: background-color 0.2s ease, border-color 0.2s ease;
+            box-sizing: border-box;
         }
 
         /* Workspace Body */
@@ -431,8 +500,36 @@
             flex: 1 0 auto;
         }
 
-        /* Desktop Collapsed State */
+        /* Desktop Layout & Collapsed State */
         @media (min-width: 992px) {
+            .app-shell {
+                flex-direction: row;
+                flex-wrap: nowrap;
+            }
+            .chatgpt-sidebar {
+                position: relative;
+                height: 100vh;
+                flex-shrink: 0;
+            }
+            .main-workspace {
+                flex: 1 1 0%;
+                min-width: 0;
+                height: 100vh;
+            }
+            /* Desktop toggle button: visible ONLY when sidebar is collapsed */
+            .app-shell.sidebar-collapsed .workspace-topbar .sidebar-toggle-btn {
+                display: inline-flex !important;
+            }
+            .app-shell.sidebar-collapsed .workspace-topbar .page-topbar-divider {
+                display: inline !important;
+            }
+            .app-shell:not(.sidebar-collapsed) .workspace-topbar .sidebar-toggle-btn {
+                display: none !important;
+            }
+            .app-shell:not(.sidebar-collapsed) .workspace-topbar .page-topbar-divider {
+                display: none !important;
+            }
+
             .app-shell.sidebar-collapsed .chatgpt-sidebar {
                 width: 0 !important;
                 min-width: 0 !important;
@@ -454,6 +551,18 @@
 
         /* Mobile Drawer State */
         @media (max-width: 991.98px) {
+            .workspace-topbar .sidebar-toggle-btn {
+                display: inline-flex !important;
+            }
+            .workspace-topbar .page-topbar-divider {
+                display: inline !important;
+            }
+            .app-shell.sidebar-mobile-open .workspace-topbar .sidebar-toggle-btn {
+                display: none !important;
+            }
+            .app-shell.sidebar-mobile-open .workspace-topbar .page-topbar-divider {
+                display: none !important;
+            }
             .chatgpt-sidebar {
                 position: fixed;
                 top: 0;
@@ -756,42 +865,63 @@
     @yield('styles')
 </head>
 <body>
-    @auth
-        <div class="app-shell" id="appShell">
-            <!-- Mobile Backdrop -->
-            <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div class="app-shell" id="appShell">
+        <!-- Mobile Backdrop -->
+        <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
-            <!-- ChatGPT Collapsible Left Sidebar -->
-            <aside class="chatgpt-sidebar" id="appSidebar">
-                <!-- Sidebar Header with Branding & Collapse Button -->
-                <div class="sidebar-header d-flex align-items-center justify-content-between">
-                    <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="https://appiflybd.com/" target="_blank" rel="noopener noreferrer" title="Shofol Connect" aria-label="Shofol Connect">
-                        <img src="{{ asset('images/shofol-connect-logo.png') }}" alt="Shofol Connect" class="shofol-navbar-logo">
-                        <span class="brand-title text-white">Shofol Connect</span>
-                    </a>
-                    <div class="d-flex align-items-center">
-                        <button type="button" id="sidebarCollapseBtn" class="btn btn-sm text-white-50 p-1 d-none d-lg-inline-flex align-items-center justify-content-center" title="Collapse sidebar" aria-label="Collapse sidebar">
-                            <i class="bi bi-layout-sidebar-inset fs-5"></i>
-                        </button>
-                        <button type="button" id="sidebarCloseBtn" class="btn btn-sm text-white-50 p-1 d-lg-none d-inline-flex align-items-center justify-content-center" title="Close sidebar" aria-label="Close sidebar">
-                            <i class="bi bi-x-lg fs-5"></i>
-                        </button>
-                    </div>
+        <!-- ChatGPT Collapsible Left Sidebar -->
+        <aside class="chatgpt-sidebar" id="appSidebar">
+            <!-- Sidebar Header with Branding & Collapse Button -->
+            <div class="sidebar-header d-flex align-items-center justify-content-between">
+                <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="https://appiflybd.com/" target="_blank" rel="noopener noreferrer" title="Shofol Connect" aria-label="Shofol Connect">
+                    <img src="{{ asset('images/shofol-connect-logo.png') }}" alt="Shofol Connect" class="shofol-navbar-logo" width="30" height="30">
+                    <span class="brand-title text-white">Shofol Connect</span>
+                </a>
+                <div class="d-flex align-items-center flex-shrink-0 ms-2">
+                    <button type="button" id="sidebarCollapseBtn" class="btn btn-sm text-white-50 p-1 d-none d-lg-inline-flex align-items-center justify-content-center" title="Collapse sidebar" aria-label="Collapse sidebar">
+                        <i class="bi bi-layout-sidebar-inset fs-5"></i>
+                    </button>
+                    <button type="button" id="sidebarCloseBtn" class="btn btn-sm text-white-50 p-1 d-lg-none d-inline-flex align-items-center justify-content-center" title="Close sidebar" aria-label="Close sidebar">
+                        <i class="bi bi-x-lg fs-5"></i>
+                    </button>
                 </div>
+            </div>
 
-                <!-- New Support Chat CTA (ChatGPT hallmark) -->
-                <div class="px-3 pt-3 pb-1">
-                    <a href="{{ route('chat.index') }}" class="sidebar-new-chat-btn {{ request()->routeIs('chat.*') ? 'active-chat' : '' }}">
-                        <span class="d-flex align-items-center gap-2">
-                            <i class="bi bi-plus-lg"></i>
-                            <span>New Support Chat</span>
-                        </span>
-                        <i class="bi bi-robot text-primary"></i>
-                    </a>
+            <!-- ChatGPT-style Sidebar Search Bar -->
+            <div class="sidebar-search-container px-3 pt-3 pb-1">
+                <div class="sidebar-search-wrapper position-relative">
+                    <i class="bi bi-search sidebar-search-icon" aria-hidden="true"></i>
+                    <input type="text"
+                           id="sidebarChatSearch"
+                           class="form-control sidebar-search-input"
+                           placeholder="Search chats"
+                           aria-label="Search chats"
+                           autocomplete="off"
+                           spellcheck="false">
+                    <button type="button"
+                            id="sidebarChatSearchClear"
+                            class="btn btn-sm sidebar-search-clear d-none"
+                            title="Clear search"
+                            aria-label="Clear search">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </button>
                 </div>
+            </div>
 
-                <!-- Scrollable Navigation Items -->
-                <nav class="sidebar-nav-scroll">
+            <!-- New Support Chat CTA (ChatGPT hallmark) -->
+            <div class="px-3 pt-2 pb-1">
+                <a href="{{ Auth::check() ? route('chat.index') : url('/') }}" class="sidebar-new-chat-btn {{ (request()->routeIs('chat.*') || request()->is('/')) ? 'active-chat' : '' }}">
+                    <span class="d-flex align-items-center gap-2">
+                        <i class="bi bi-plus-lg"></i>
+                        <span>New Support Chat</span>
+                    </span>
+                    <i class="bi bi-robot text-primary"></i>
+                </a>
+            </div>
+
+            <!-- Scrollable Navigation Items -->
+            <nav class="sidebar-nav-scroll">
+                @auth
                     <!-- User Workspace Navigation -->
                     <div class="sidebar-section-title">User Navigation</div>
                     <a class="sidebar-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}">
@@ -810,6 +940,42 @@
                         <i class="bi bi-ticket-detailed"></i>
                         <span>Support Tickets</span>
                     </a>
+
+                    @php
+                        $sidebarConversations = collect();
+                        if (Auth::user()->exists) {
+                            try {
+                                $sidebarConversations = Auth::user()->conversations()
+                                    ->latest('updated_at')
+                                    ->take(10)
+                                    ->get();
+                            } catch (\Throwable $e) {
+                                $sidebarConversations = collect();
+                            }
+                        }
+                    @endphp
+
+                    @if($sidebarConversations->isNotEmpty())
+                        <div class="sidebar-section-title mt-3" id="sidebarRecentChatsTitle">Recent Chats</div>
+                        <div id="sidebarConversationList">
+                            @foreach($sidebarConversations as $sidebarConvo)
+                                <a class="sidebar-nav-link sidebar-conversation-item {{ request()->route('conversation')?->id === $sidebarConvo->id ? 'active' : '' }}"
+                                   href="{{ route('chat.show', $sidebarConvo) }}"
+                                   data-title="{{ strtolower($sidebarConvo->title) }}"
+                                   title="{{ $sidebarConvo->title }}">
+                                    <i class="bi bi-chat-left-text"></i>
+                                    <span class="text-truncate">{{ $sidebarConvo->title }}</span>
+                                </a>
+                            @endforeach
+                        </div>
+                        <div id="sidebarNoSearchResults" class="text-white-50 small px-3 py-2 d-none fst-italic">
+                            No matching chats found
+                        </div>
+                    @else
+                        <div id="sidebarNoSearchResults" class="text-white-50 small px-3 py-2 d-none fst-italic">
+                            No matching chats found
+                        </div>
+                    @endif
 
                     <!-- Admin Navigation -->
                     @if(Auth::user()->isAdmin())
@@ -845,10 +1011,64 @@
                             <span>Conversations</span>
                         </a>
                     @endif
-                </nav>
+                @else
+                    <!-- Guest Navigation & Knowledge Modules -->
+                    <div class="sidebar-section-title">Navigation</div>
+                    <a class="sidebar-nav-link {{ request()->is('/') ? 'active' : '' }}" href="{{ url('/') }}">
+                        <i class="bi bi-house-door"></i>
+                        <span>AI Assistant Home</span>
+                    </a>
+                    <a class="sidebar-nav-link" href="{{ route('login') }}">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        <span>Sign In</span>
+                    </a>
+                    @if (Route::has('register'))
+                        <a class="sidebar-nav-link" href="{{ route('register') }}">
+                            <i class="bi bi-person-plus"></i>
+                            <span>Create Account</span>
+                        </a>
+                    @endif
 
-                <!-- Account Section (Fixed at bottom) -->
-                <div class="sidebar-account-footer">
+                    <div class="sidebar-section-title mt-3" id="sidebarRecentChatsTitle">Knowledge Topics</div>
+                    <div id="sidebarConversationList">
+                        <a class="sidebar-nav-link sidebar-conversation-item"
+                           href="{{ url('/') }}?prompt=leave-policy"
+                           data-title="leave policy annual casual sick leave hrm"
+                           title="Leave Policy">
+                            <i class="bi bi-calendar2-check"></i>
+                            <span class="text-truncate">Leave Policy</span>
+                        </a>
+                        <a class="sidebar-nav-link sidebar-conversation-item"
+                           href="{{ url('/') }}?prompt=payroll-salary"
+                           data-title="payroll salary payslip disbursement deductions allowances"
+                           title="Payroll and Salary">
+                            <i class="bi bi-cash-stack"></i>
+                            <span class="text-truncate">Payroll & Salary</span>
+                        </a>
+                        <a class="sidebar-nav-link sidebar-conversation-item"
+                           href="{{ url('/') }}?prompt=crm-sales"
+                           data-title="crm sales leads pipeline deals customers accounts"
+                           title="CRM and Sales">
+                            <i class="bi bi-briefcase"></i>
+                            <span class="text-truncate">CRM & Sales</span>
+                        </a>
+                        <a class="sidebar-nav-link sidebar-conversation-item"
+                           href="{{ url('/') }}?prompt=accounting-invoicing"
+                           data-title="accounting invoicing bills tax reconciliation finance"
+                           title="Accounting and Invoicing">
+                            <i class="bi bi-receipt"></i>
+                            <span class="text-truncate">Accounting & Invoicing</span>
+                        </a>
+                    </div>
+                    <div id="sidebarNoSearchResults" class="text-white-50 small px-3 py-2 d-none fst-italic">
+                        No matching topics found
+                    </div>
+                @endauth
+            </nav>
+
+            <!-- Account Section (Fixed at bottom) -->
+            <div class="sidebar-account-footer">
+                @auth
                     <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
                         <div class="d-flex align-items-center gap-2 overflow-hidden">
                             <div class="user-avatar-circle flex-shrink-0">
@@ -875,46 +1095,70 @@
                             <span>Log Out</span>
                         </button>
                     </form>
+                @else
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <div class="user-avatar-circle flex-shrink-0 bg-secondary bg-opacity-25 text-white-50">
+                            <i class="bi bi-person"></i>
+                        </div>
+                        <div class="overflow-hidden">
+                            <div class="text-white fw-semibold small">Guest Visitor</div>
+                            <div class="text-white-50" style="font-size: 0.7rem; line-height: 1.1;">Sign in to save chats</div>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-column gap-1">
+                        <a href="{{ route('login') }}" class="btn btn-outline-light btn-sm w-100 d-flex align-items-center justify-content-center gap-2 py-1">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                            <span>Log In</span>
+                        </a>
+                        @if (Route::has('register'))
+                            <a href="{{ route('register') }}" class="btn btn-primary btn-sm w-100 d-flex align-items-center justify-content-center gap-2 py-1">
+                                <i class="bi bi-person-plus-fill"></i>
+                                <span>Register</span>
+                            </a>
+                        @endif
+                    </div>
+                @endauth
+            </div>
+
+            <!-- Draggable Sidebar Resize Handle -->
+            <div class="sidebar-resizer" id="sidebarResizer" title="Drag to resize sidebar" aria-hidden="true"></div>
+        </aside>
+
+        <!-- Main Workspace Container -->
+        <div class="main-workspace">
+            <!-- Top Workspace Header Bar with Sidebar Toggle -->
+            <header class="workspace-topbar">
+                <div class="d-flex align-items-center gap-2 min-w-0">
+                    <!-- Clickable Logo shown in top-left when sidebar is hidden (reopens sidebar) -->
+                    <button type="button" id="collapsedLogoBtn" class="collapsed-topbar-brand btn btn-link p-0 border-0 text-decoration-none align-items-center" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Open sidebar" aria-label="Open sidebar">
+                        <img src="{{ asset('images/shofol-connect-logo.png') }}" alt="Shofol Connect" class="shofol-topbar-logo">
+                    </button>
+
+                    <!-- Compact Sidebar Toggle Button in Top Navbar -->
+                    <button type="button" id="sidebarToggleBtn" class="btn btn-sm btn-light border text-secondary align-items-center justify-content-center shadow-sm sidebar-toggle-btn" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Collapse sidebar" aria-label="Toggle sidebar" aria-expanded="true">
+                        <i class="bi bi-layout-sidebar fs-6"></i>
+                    </button>
+
+                    <span class="page-topbar-divider fw-semibold text-secondary small">|</span>
+                    <span class="page-topbar-title fw-semibold small text-truncate">
+                        @yield('title', 'Shofol Connect — AI Support Assistant')
+                    </span>
                 </div>
 
-                <!-- Draggable Sidebar Resize Handle -->
-                <div class="sidebar-resizer" id="sidebarResizer" title="Drag to resize sidebar" aria-hidden="true"></div>
-            </aside>
+                <div class="d-flex align-items-center gap-2">
+                    <!-- Theme Toggle Button in Header Topbar (Icon Only) -->
+                    <button type="button"
+                            id="topbarThemeToggleBtn"
+                            class="btn btn-sm btn-light border shadow-sm theme-toggle-btn"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Switch to Dark Mode"
+                            aria-label="Switch to Dark Mode">
+                        <i class="bi bi-moon-stars-fill theme-icon-moon text-secondary"></i>
+                        <i class="bi bi-sun-fill theme-icon-sun text-warning d-none"></i>
+                    </button>
 
-            <!-- Main Workspace Container -->
-            <div class="main-workspace">
-                <!-- Top Workspace Header Bar with Sidebar Toggle -->
-                <header class="workspace-topbar">
-                    <div class="d-flex align-items-center gap-2">
-                        <!-- Clickable Logo shown in top-left when sidebar is hidden (reopens sidebar) -->
-                        <button type="button" id="collapsedLogoBtn" class="collapsed-topbar-brand btn btn-link p-0 border-0 text-decoration-none align-items-center" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Open sidebar" aria-label="Open sidebar">
-                            <img src="{{ asset('images/shofol-connect-logo.png') }}" alt="Shofol Connect" class="shofol-topbar-logo">
-                        </button>
-
-                        <!-- Compact Sidebar Toggle Button in Top Navbar -->
-                        <button type="button" id="sidebarToggleBtn" class="btn btn-sm btn-light border text-secondary d-inline-flex align-items-center justify-content-center shadow-sm sidebar-toggle-btn" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Collapse sidebar" aria-label="Toggle sidebar" aria-expanded="true">
-                            <i class="bi bi-layout-sidebar fs-6"></i>
-                        </button>
-
-                        <span class="fw-semibold text-secondary small d-none d-md-inline">|</span>
-                        <span class="fw-semibold text-dark small text-truncate">
-                            @yield('title', 'Shofol Connect — AI Support Assistant')
-                        </span>
-                    </div>
-
-                    <div class="d-flex align-items-center gap-2">
-                        <!-- Theme Toggle Button in Header Topbar (Icon Only) -->
-                        <button type="button"
-                                id="topbarThemeToggleBtn"
-                                class="btn btn-sm btn-light border shadow-sm theme-toggle-btn"
-                                data-bs-toggle="tooltip"
-                                data-bs-placement="bottom"
-                                title="Switch to Dark Mode"
-                                aria-label="Switch to Dark Mode">
-                            <i class="bi bi-moon-stars-fill theme-icon-moon text-secondary"></i>
-                            <i class="bi bi-sun-fill theme-icon-sun text-warning d-none"></i>
-                        </button>
-
+                    @auth
                         @if(request()->routeIs('chat.*'))
                             <span class="badge bg-primary-subtle text-primary border border-primary-subtle d-inline-flex align-items-center gap-1 small">
                                 <i class="bi bi-shield-check"></i> RAG Grounded
@@ -925,100 +1169,66 @@
                                 <span class="d-none d-sm-inline">AI Assistant</span>
                             </a>
                         @endif
-                    </div>
-                </header>
-
-                <!-- Workspace Scrollable Body -->
-                <main class="workspace-body">
-                    <div class="main-content-inner">
-                        <!-- Flash Message Alerts -->
-                        @if (session('status'))
-                            <div class="alert alert-info alert-dismissible fade show shadow-sm" role="alert">
-                                <i class="bi bi-info-circle-fill me-2"></i> {{ session('status') }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>
+                    @else
+                        <a href="{{ route('login') }}" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                            <span>Log In</span>
+                        </a>
+                        @if (Route::has('register'))
+                            <a href="{{ route('register') }}" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1">
+                                <i class="bi bi-person-plus-fill"></i>
+                                <span>Register</span>
+                            </a>
                         @endif
+                    @endauth
+                </div>
+            </header>
 
-                        @if (session('success'))
-                            <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-                                <i class="bi bi-check-circle-fill me-2"></i> {{ session('success') }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>
-                        @endif
-
-                        @if (session('error'))
-                            <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-                                <i class="bi bi-exclamation-triangle-fill me-2"></i> {{ session('error') }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>
-                        @endif
-
-                        @yield('content')
-                    </div>
-
-                    <!-- Footer -->
-                    <footer class="footer py-3 text-muted small mt-4">
-                        <div class="container-fluid px-3">
-                            <div class="footer-layout">
-                                <div class="footer-left">
-                                    <span>&copy; {{ date('Y') }} <strong>Shofol Connect</strong> — AI Support Assistant MVP. All rights reserved.</span>
-                                </div>
-                                <div class="footer-center">
-                                    <span>Developed by <a href="https://appiflybd.com/" target="_blank" rel="noopener noreferrer" class="footer-credit-link fw-bold">APPIFLY BD LTD</a></span>
-                                </div>
-                                <div class="footer-right" aria-hidden="true"></div>
-                            </div>
+            <!-- Workspace Scrollable Body -->
+            <main class="workspace-body">
+                <div class="main-content-inner">
+                    <!-- Flash Message Alerts -->
+                    @if (session('status'))
+                        <div class="alert alert-info alert-dismissible fade show shadow-sm" role="alert">
+                            <i class="bi bi-info-circle-fill me-2"></i> {{ session('status') }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
-                    </footer>
-                </main>
-            </div>
-        </div>
-    @else
-        <!-- Guest View fallback -->
-        <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm">
-            <div class="container">
-                <a class="navbar-brand d-flex align-items-center gap-2 fw-bold py-1" href="https://appiflybd.com/" target="_blank" rel="noopener noreferrer" title="Shofol Connect" aria-label="Shofol Connect">
-                    <img src="{{ asset('images/shofol-connect-logo.png') }}" alt="Shofol Connect" class="shofol-navbar-logo">
-                    <span class="brand-title text-white">Shofol Connect</span>
-                </a>
-                <div class="d-flex align-items-center gap-2 ms-auto">
-                    <!-- Guest Theme Toggle Button (Icon Only) -->
-                    <button type="button"
-                            id="guestThemeToggleBtn"
-                            class="btn btn-sm btn-outline-light shadow-sm theme-toggle-btn"
-                            data-bs-toggle="tooltip"
-                            data-bs-placement="bottom"
-                            title="Switch to Dark Mode"
-                            aria-label="Switch to Dark Mode">
-                        <i class="bi bi-moon-stars-fill theme-icon-moon"></i>
-                        <i class="bi bi-sun-fill theme-icon-sun text-warning d-none"></i>
-                    </button>
-                    <a class="btn btn-outline-light btn-sm" href="{{ route('login') }}">Log In</a>
-                    @if (Route::has('register'))
-                        <a class="btn btn-primary btn-sm" href="{{ route('register') }}">Register</a>
                     @endif
+
+                    @if (session('success'))
+                        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+                            <i class="bi bi-check-circle-fill me-2"></i> {{ session('success') }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    @endif
+
+                    @if (session('error'))
+                        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i> {{ session('error') }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    @endif
+
+                    @yield('content')
                 </div>
-            </div>
-        </nav>
-        <main class="py-4">
-            <div class="container">
-                @yield('content')
-            </div>
-        </main>
-        <footer class="footer py-3 text-muted small mt-auto border-top bg-white">
-            <div class="container">
-                <div class="footer-layout">
-                    <div class="footer-left">
-                        <span>&copy; {{ date('Y') }} <strong>Shofol Connect</strong> — AI Support Assistant MVP. All rights reserved.</span>
+
+                <!-- Footer -->
+                <footer class="footer py-3 text-muted small mt-4">
+                    <div class="container-fluid px-3">
+                        <div class="footer-layout">
+                            <div class="footer-left">
+                                <span>&copy; {{ date('Y') }} <strong>Shofol Connect</strong> — AI Support Assistant MVP. All rights reserved.</span>
+                            </div>
+                            <div class="footer-center">
+                                <span>Developed by <a href="https://appiflybd.com/" target="_blank" rel="noopener noreferrer" class="footer-credit-link fw-bold">APPIFLY BD LTD</a></span>
+                            </div>
+                            <div class="footer-right" aria-hidden="true"></div>
+                        </div>
                     </div>
-                    <div class="footer-center">
-                        <span>Developed by <a href="https://appiflybd.com/" target="_blank" rel="noopener noreferrer" class="footer-credit-link fw-bold">APPIFLY BD LTD</a></span>
-                    </div>
-                    <div class="footer-right" aria-hidden="true"></div>
-                </div>
-            </div>
-        </footer>
-    @endauth
+                </footer>
+            </main>
+        </div>
+    </div>
 
     <!-- Bootstrap Bundle JS (includes Popper) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
@@ -1240,6 +1450,66 @@
                     closeMobileSidebar(e);
                 }
             });
+
+            // Client-side Sidebar Chat Search Controller
+            const searchInput = document.getElementById('sidebarChatSearch');
+            const searchClearBtn = document.getElementById('sidebarChatSearchClear');
+            const noResultsEl = document.getElementById('sidebarNoSearchResults');
+            const chatsTitle = document.getElementById('sidebarRecentChatsTitle');
+
+            if (searchInput) {
+                searchInput.addEventListener('input', function () {
+                    const query = this.value.trim().toLowerCase();
+                    const items = document.querySelectorAll('.sidebar-conversation-item');
+
+                    if (searchClearBtn) {
+                        searchClearBtn.classList.toggle('d-none', query.length === 0);
+                    }
+
+                    if (!items.length) {
+                        if (query.length > 0 && noResultsEl) {
+                            noResultsEl.classList.remove('d-none');
+                        } else if (noResultsEl) {
+                            noResultsEl.classList.add('d-none');
+                        }
+                        return;
+                    }
+
+                    let visibleCount = 0;
+                    items.forEach(item => {
+                        const title = item.getAttribute('data-title') || item.textContent.toLowerCase();
+                        const matches = title.includes(query);
+                        item.classList.toggle('d-none', !matches);
+                        item.classList.toggle('d-flex', matches);
+                        if (matches) visibleCount++;
+                    });
+
+                    if (noResultsEl) {
+                        noResultsEl.classList.toggle('d-none', visibleCount > 0 || query.length === 0);
+                    }
+                    if (chatsTitle && query.length > 0) {
+                        chatsTitle.textContent = visibleCount > 0 ? `Chats (${visibleCount})` : 'Chats';
+                    } else if (chatsTitle) {
+                        chatsTitle.textContent = 'Recent Chats';
+                    }
+                });
+
+                searchInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') {
+                        this.value = '';
+                        this.dispatchEvent(new Event('input'));
+                        this.blur();
+                    }
+                });
+
+                if (searchClearBtn) {
+                    searchClearBtn.addEventListener('click', function () {
+                        searchInput.value = '';
+                        searchInput.dispatchEvent(new Event('input'));
+                        searchInput.focus();
+                    });
+                }
+            }
 
             // THEME CONTROLLER
             const THEME_KEY = 'shofol_theme';
